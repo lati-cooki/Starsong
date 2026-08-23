@@ -16,7 +16,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Printed so a failure caused by a runner image change is obvious at a
       # glance rather than after twenty minutes of guessing.
@@ -61,7 +61,20 @@ jobs:
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -only-testing:StarsongTests \
             -resultBundlePath UnitTests.xcresult \
-            | xcbeautify
+            2>&1 | tee xcodebuild.log | xcbeautify
+
+      # Checked by machine because checking it by eye went wrong: the grep used
+      # locally was `warning: .*\.swift`, which requires the filename to follow
+      # the word "warning", and it never does. Every "no warnings" it reported
+      # was unearned.
+      - name: No warnings in our own code
+        shell: bash
+        run: |
+          if grep -E '/(Sources|Tests|Tools)/.*(warning|error):' xcodebuild.log; then
+            echo "::error::Swift warnings in project code, listed above"
+            exit 1
+          fi
+          echo "No warnings in Sources, Tests or Tools."
 
       - name: UI tests
         shell: bash
@@ -81,7 +94,7 @@ jobs:
 
       - name: Upload results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcresults
           path: "*.xcresult"

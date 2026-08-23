@@ -28,7 +28,10 @@ final class SkyModel {
     private(set) var lines: [[Int]] = [[]]
     /// The line being drawn on. New stars join this one.
     private(set) var activeLine = 0
-    static let maxLines = 3
+    /// A plain constant, readable from anywhere — being a member of a
+    /// @MainActor type would otherwise isolate it, which is an error under
+    /// the Swift 6 language mode.
+    nonisolated static let maxLines = 3
 
     /// The line being drawn on, which is what most of the app means by "the
     /// constellation".

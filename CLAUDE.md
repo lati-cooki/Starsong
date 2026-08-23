@@ -28,29 +28,27 @@ Entitlements deserve a specific warning: adding one through Xcode creates the `.
 file (which survives regeneration) *and* a `CODE_SIGN_ENTITLEMENTS` build setting (which does
 not). The result is an entitlements file that looks correct and does nothing.
 
-## Regenerating resets your Xcode session
+## Regenerating is cheap; run it
 
-`xcodegen generate` recreates `Starsong.xcodeproj/`, and that wipes `xcuserdata/` — where the
-active scheme and the active run destination live. Both fall back to defaults. The scheme
-itself is generated from the `scheme:` block in `project.yml`, so scheme edits made in Xcode's
-UI are discarded as well.
+`xcodegen generate` rewrites `project.pbxproj` inside the existing `Starsong.xcodeproj/` rather
+than replacing the directory, so `xcuserdata/` survives and the active scheme and run
+destination are left alone. Measured: same `UserInterfaceState.xcuserstate` byte-for-byte, new
+pbxproj inode, destination still `Lati`. There is no reason to avoid regenerating, and it is the
+only way to see a `project.yml` edit take effect — CI can confirm the spec is well-formed, but
+it builds simulator-only, so it cannot check anything about device signing.
+
+The *scheme* is a different matter: it is generated from the `scheme:` block in `project.yml`,
+so scheme edits made in Xcode's UI are discarded on the next generate.
 
 If you change the run destination or the active scheme in order to do something, **put it back
-when you are done.** The working default is the physical device, `Lati`.
+when you are done** — nothing else will. The working default is the physical device, `Lati`.
 
 ## Running the tests
 
-`DEVELOPMENT_TEAM` is set project-wide in `project.yml`, so the test bundles inherit it and
-`buildForTesting` can sign for a physical device. Running the suite on a simulator (e.g.
-`iPhone 17 Pro`) is still the quicker path; either way, **switch the destination back to `Lati`
-afterwards**, because regenerating will not do it for you.
-
-## Checking a project.yml change without regenerating
-
-Verifying an edit to `project.yml` normally means running `xcodegen generate`, which resets the
-open Xcode session. Pushing instead is usually the better trade: CI regenerates from scratch on
-a clean runner and builds and tests both targets, so the change is checked without touching
-anyone's machine.
+`DEVELOPMENT_TEAM` is set project-wide in `project.yml`, so both test bundles inherit it and
+`buildForTesting` signs for a physical device. Verified against `Lati` after a regenerate.
+Running the suite on a simulator (e.g. `iPhone 17 Pro`) is still the quicker path; either way,
+switch the destination back to `Lati` afterwards.
 
 ## Code style
 

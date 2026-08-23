@@ -40,10 +40,17 @@ when you are done.** The working default is the physical device, `Lati`.
 
 ## Running the tests
 
-The test targets have no `DEVELOPMENT_TEAM`, so `buildForTesting` fails to sign for a physical
-device. Run the suite on a simulator (e.g. `iPhone 17 Pro`) instead, and switch the destination
-back afterwards. Fixing this properly means adding `DEVELOPMENT_TEAM` to `project.yml` — not
-setting a team in Xcode, which would be wiped.
+`DEVELOPMENT_TEAM` is set project-wide in `project.yml`, so the test bundles inherit it and
+`buildForTesting` can sign for a physical device. Running the suite on a simulator (e.g.
+`iPhone 17 Pro`) is still the quicker path; either way, **switch the destination back to `Lati`
+afterwards**, because regenerating will not do it for you.
+
+## Checking a project.yml change without regenerating
+
+Verifying an edit to `project.yml` normally means running `xcodegen generate`, which resets the
+open Xcode session. Pushing instead is usually the better trade: CI regenerates from scratch on
+a clean runner and builds and tests both targets, so the change is checked without touching
+anyone's machine.
 
 ## Code style
 

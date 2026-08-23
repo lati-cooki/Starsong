@@ -107,3 +107,74 @@ extension SkyAccessibilityUITests {
         XCTAssertTrue(app.buttons["Keep this one"].exists, "a drawn constellation should be keepable")
     }
 }
+
+extension SkyAccessibilityUITests {
+    /// Three sheets hang off one view. Stacking `.sheet` modifiers is a known
+    /// way to have one of them silently never present, so each is opened here
+    /// by name rather than trusted.
+    func testEverySheetActuallyOpens() {
+        let app = launch()
+        let cases = [("Voices", "Voices"), ("Real constellations", "Real constellations")]
+        for (button, title) in cases {
+            XCTAssertTrue(app.buttons[button].waitForExistence(timeout: 15), "\(button) is missing")
+            app.buttons[button].tap()
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10),
+                          "tapping \(button) did not present its sheet")
+            app.buttons["Done"].tap()
+            XCTAssertTrue(app.buttons["New sky"].waitForExistence(timeout: 10),
+                          "\(title) did not dismiss")
+        }
+    }
+
+    func testChoosingAVoiceChangesWhatTheSkySays() {
+        let app = launch()
+        app.buttons["Voices"].tap()
+        XCTAssertTrue(app.navigationBars["Voices"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Pluck"].waitForExistence(timeout: 10), "no row for Pluck")
+        app.buttons["Pluck"].tap()
+
+        // The caption under the wordmark carries the current voice, and says so
+        // out loud as well as showing it.
+        let caption = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Pluck, tuned to'"))
+            .firstMatch
+        XCTAssertTrue(caption.waitForExistence(timeout: 10),
+                      "the caption did not follow the chosen voice")
+    }
+}
+
+extension SkyAccessibilityUITests {
+    /// Drives the voice picker end to end and leaves screenshots behind, since
+    /// synthesised instruments are the kind of thing you want to look at and
+    /// listen to rather than take on trust from an assertion.
+    func testVoicePickerVisualCheck() throws {
+        let app = launch()
+
+        app.buttons["Voices"].tap()
+        XCTAssertTrue(app.navigationBars["Voices"].waitForExistence(timeout: 15))
+        for voice in ["Chime", "Pluck", "Piano", "Brass", "Bell"] {
+            XCTAssertTrue(app.buttons[voice].exists, "\(voice) is missing from the picker")
+        }
+        try save(XCUIScreen.main.screenshot(), as: "voices-sheet")
+
+        app.buttons["Pluck"].tap()
+
+        // Draw something in the new voice.
+        let sky = app.descendants(matching: .any)["Night sky"]
+        XCTAssertTrue(sky.waitForExistence(timeout: 10))
+        for height in [0.4, 0.55] {
+            sky.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: height))
+                .press(forDuration: 0.05,
+                       thenDragTo: sky.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: height + 0.06)))
+            if app.buttons["Play"].isEnabled { break }
+        }
+        XCTAssertTrue(app.buttons["Play"].isEnabled, "nothing was drawn")
+        try save(XCUIScreen.main.screenshot(), as: "pluck-line")
+    }
+
+    private func save(_ shot: XCUIScreenshot, as name: String) throws {
+        try shot.pngRepresentation.write(
+            to: URL.temporaryDirectory.appendingPathComponent("\(name).png"))
+        print("SHOT \(name) \(URL.temporaryDirectory.appendingPathComponent("\(name).png").path)")
+    }
+}

@@ -27,7 +27,7 @@ final class LayerTests: XCTestCase {
 
     func testDrawingGoesOntoTheActiveLine() {
         let model = drawing()
-        XCTAssertEqual(model.lines, [[0, 1, 2]])
+        XCTAssertEqual(model.lineStars, [[0, 1, 2]])
         XCTAssertEqual(model.path, [0, 1, 2])
         XCTAssertTrue(model.hasSomethingToPlay)
     }
@@ -57,12 +57,12 @@ final class LayerTests: XCTestCase {
         model.connect(starAt: 10)
         XCTAssertEqual(model.lines.count, 2, "the first star of a take opens a line")
         XCTAssertEqual(model.activeLine, 1)
-        XCTAssertEqual(model.lines[0], [0, 1, 2], "the looping line is untouched")
+        XCTAssertEqual(model.lineStars[0], [0, 1, 2], "the looping line is untouched")
 
         model.connect(starAt: 11)
         model.connect(starAt: 12)
         XCTAssertEqual(model.lines.count, 2, "the rest of the take extends it")
-        XCTAssertEqual(model.lines[1], [10, 11, 12])
+        XCTAssertEqual(model.lineStars[1], [10, 11, 12])
 
         model.stop()
     }
@@ -96,7 +96,7 @@ final class LayerTests: XCTestCase {
 
         model.undo()                       // removes star 8, line 1 now empty
         XCTAssertEqual(model.lines.count, 2)
-        XCTAssertTrue(model.lines[1].isEmpty)
+        XCTAssertTrue(model.lineStars[1].isEmpty)
 
         model.undo()                       // the empty line goes
         XCTAssertEqual(model.lines.count, 1)
@@ -118,7 +118,7 @@ final class LayerTests: XCTestCase {
         let model = SkyModel()
         model.newSky(for: size, seed: 2)
         model.undo()
-        XCTAssertEqual(model.lines, [[]])
+        XCTAssertEqual(model.lineStars, [[]])
         XCTAssertEqual(model.activeLine, 0)
     }
 
@@ -147,7 +147,7 @@ final class LayerTests: XCTestCase {
         model.play()
         model.newSky(for: size, seed: 6)
         XCTAssertFalse(model.isPlaying)
-        XCTAssertEqual(model.lines, [[]])
+        XCTAssertEqual(model.lineStars, [[]])
     }
 
     /// Lines of different lengths must not share a cycle, or layering would
@@ -175,8 +175,8 @@ final class LayerTests: XCTestCase {
         let reopened = SkyModel()
         reopened.newSky(for: size, seed: 999)
         reopened.restore(saved)
-        XCTAssertEqual(reopened.lines, model.lines)
-        XCTAssertTrue(reopened.lines.joined().allSatisfy { reopened.stars[$0].isLit })
+        XCTAssertEqual(reopened.lineStars, model.lineStars)
+        XCTAssertTrue(reopened.connectedStars.allSatisfy { reopened.stars[$0].isLit })
     }
 
     func testHalfDrawnLinesAreNotKept() throws {

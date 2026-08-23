@@ -23,9 +23,9 @@ struct SplitMix64: RandomNumberGenerator {
 @Observable
 final class SkyModel {
     private(set) var stars: [Star] = []
-    /// Each line is a constellation: indices into `stars`, in the order they
-    /// were connected. There is always at least one, even when it is empty.
-    private(set) var lines: [[Int]] = [[]]
+    /// Each line is a constellation and the voice it is played in. There is
+    /// always at least one, even when it is empty.
+    private(set) var lines: [Line] = [Line()]
     /// The line being drawn on. New stars join this one.
     private(set) var activeLine = 0
     /// A plain constant, readable from anywhere — being a member of a
@@ -36,10 +36,33 @@ final class SkyModel {
     /// The line being drawn on, which is what most of the app means by "the
     /// constellation".
     var path: [Int] {
-        get { lines.indices.contains(activeLine) ? lines[activeLine] : [] }
+        get { lines.indices.contains(activeLine) ? lines[activeLine].stars : [] }
         set {
             guard lines.indices.contains(activeLine) else { return }
-            lines[activeLine] = newValue
+            lines[activeLine].stars = newValue
+        }
+    }
+
+    /// The voice the line being drawn on is played in.
+    var instrument: Instrument {
+        lines.indices.contains(activeLine) ? lines[activeLine].instrument : .chime
+    }
+
+    /// Just the shapes, for anything comparing constellations rather than voices.
+    var lineStars: [[Int]] { lines.map(\.stars) }
+
+    /// Every star on any line, for asking whether one is still in use.
+    var connectedStars: [Int] { lines.flatMap(\.stars) }
+
+    func setInstrument(_ instrument: Instrument, on line: Int? = nil) {
+        let target = line ?? activeLine
+        guard lines.indices.contains(target), lines[target].instrument != instrument else { return }
+        lines[target].instrument = instrument
+        keptID = nil
+        // So you hear what you just chose, without having to press anything.
+        if let star = lines[target].stars.last, stars.indices.contains(star) {
+            Synth.shared.ping(Music.pitch(forY: stars[star].y, in: tuning),
+                              instrument: instrument, duration: 1.0, volume: 0.22)
         }
     }
     private(set) var pulses: [Pulse] = []
@@ -82,10 +105,10 @@ final class SkyModel {
     var pathStars: [Star] { stars(on: activeLine) }
     func stars(on line: Int) -> [Star] {
         guard lines.indices.contains(line) else { return [] }
-        return lines[line].compactMap { stars.indices.contains($0) ? stars[$0] : nil }
+        return lines[line].stars.compactMap { stars.indices.contains($0) ? stars[$0] : nil }
     }
     /// Every line with enough stars to sing.
-    var singableLines: [Int] { lines.indices.filter { lines[$0].count >= 2 } }
+    var singableLines: [Int] { lines.indices.filter { lines[$0].stars.count >= 2 } }
     var hasSomethingToPlay: Bool { !singableLines.isEmpty }
     var canPlay: Bool { hasSomethingToPlay }
     var canName: Bool { path.count >= 2 && !isNaming }
@@ -101,7 +124,8 @@ final class SkyModel {
         myth = nil
 
         keptID = nil
-        lines = [[]]
+        // A new sky keeps the voice you were last playing in.
+        lines = [Line(instrument: instrument)]
         activeLine = 0
         let resolved = seed ?? UInt64.random(in: .min ... .max)
         makeSky(seed: resolved, count: Self.starCount(for: size))
@@ -166,7 +190,8 @@ final class SkyModel {
         }
         cursorSlot = next
         let star = stars[navigationOrder[next]]
-        Synth.shared.ping(Music.pitch(forY: star.y, in: tuning), duration: 0.5, volume: 0.18)
+        Synth.shared.ping(Music.pitch(forY: star.y, in: tuning), instrument: instrument,
+                          duration: 0.5, volume: 0.18)
         return true
     }
 
@@ -189,7 +214,7 @@ final class SkyModel {
 
         let field = Self.starCount(for: size)
         makeSky(seed: seed ?? UInt64.random(in: .min ... .max), count: field, figure: figure)
-        lines = [figure.walk.map { field + $0 }]
+        lines = [Line(stars: figure.walk.map { field + $0 }, instrument: instrument)]
         activeLine = 0
         myth = Namer.Myth(name: figure.name, myth: figure.note)
         connections += 1
@@ -203,7 +228,9 @@ final class SkyModel {
         guard !drawn.isEmpty else { return nil }
         let named = myth ?? Namer.unnamed
         let sky = SavedSky(id: id, seed: seed, fieldStarCount: fieldStarCount,
-                           figureID: figureID, lines: drawn,
+                           figureID: figureID,
+                           lines: drawn.map(\.stars),
+                           voices: drawn.map(\.instrument),
                            name: named.name, myth: named.myth)
         return sky.isCoherent ? sky : nil
     }
@@ -222,9 +249,9 @@ final class SkyModel {
         shooters = []
 
         makeSky(seed: sky.seed, count: sky.fieldStarCount, figure: Atlas.figure(id: sky.figureID))
-        lines = sky.lines
-        activeLine = max(sky.lines.count - 1, 0)
-        for index in lines.joined() where stars.indices.contains(index) { stars[index].isLit = true }
+        lines = sky.savedLines
+        activeLine = max(lines.count - 1, 0)
+        for index in connectedStars where stars.indices.contains(index) { stars[index].isLit = true }
         myth = Namer.Myth(name: sky.name, myth: sky.myth)
         keptID = sky.id
         connections += 1
@@ -294,7 +321,7 @@ final class SkyModel {
         keptID = nil
 
         let star = stars[index]
-        Synth.shared.ping(Music.pitch(forY: star.y, in: tuning))
+        Synth.shared.ping(Music.pitch(forY: star.y, in: tuning), instrument: instrument)
         pulses.append(Pulse(position: CGPoint(x: star.x, y: star.y), start: .now, line: nil))
         return true
     }
@@ -304,7 +331,7 @@ final class SkyModel {
     @discardableResult
     func startNewLine() -> Bool {
         guard lines.count < Self.maxLines else { return false }
-        lines.append([])
+        lines.append(Line(instrument: instrument))
         activeLine = lines.count - 1
         keptID = nil
         if isPlaying { startLoop(for: activeLine) }
@@ -323,7 +350,7 @@ final class SkyModel {
             return
         }
         // Only dim the star if no line passes through it any more.
-        if !lines.joined().contains(removed) {
+        if !connectedStars.contains(removed) {
             stars[removed].isLit = false
         }
         myth = nil
@@ -370,12 +397,14 @@ final class SkyModel {
     /// Schedules one time round a line, and says how long that takes.
     @discardableResult
     private func soundOnce(_ notes: [Star], line: Int) -> Double {
+        let voice = lines.indices.contains(line) ? lines[line].instrument : .chime
         let starts = Music.schedule(for: notes)
         let durations = Music.durations(for: notes)
         let now = Date()
 
         for (i, star) in notes.enumerated() {
             Synth.shared.ping(Music.pitch(forY: star.y, in: tuning),
+                              instrument: voice,
                               delay: starts[i],
                               duration: durations[i],
                               volume: line == 0 ? 0.25 : 0.19)
@@ -400,12 +429,15 @@ final class SkyModel {
     }
 
     /// Plays a melody without disturbing the sky — used from the lists.
-    static func preview(_ constellations: [[Star]], tuning: Music.Tuning = Music.default) {
+    static func preview(_ constellations: [[Star]], tuning: Music.Tuning = Music.default,
+                        voices: [Instrument] = []) {
         for (line, notes) in constellations.enumerated() where notes.count >= 2 {
+            let voice = line < voices.count ? voices[line] : .chime
             let starts = Music.schedule(for: notes)
             let durations = Music.durations(for: notes)
             for (i, star) in notes.enumerated() {
                 Synth.shared.ping(Music.pitch(forY: star.y, in: tuning),
+                                  instrument: voice,
                                   delay: starts[i],
                                   duration: durations[i],
                                   volume: line == 0 ? 0.22 : 0.17)
@@ -419,9 +451,10 @@ final class SkyModel {
         guard canName else { return }
         isNaming = true
         let drawn = singableLines.map { stars(on: $0) }
+        let voices = singableLines.map { lines[$0].instrument }
         namingTask?.cancel()
         namingTask = Task { [weak self] in
-            let result = await Namer.myth(for: drawn)
+            let result = await Namer.myth(for: drawn, voices: voices)
             guard !Task.isCancelled else { return }
             self?.myth = result
             self?.isNaming = false

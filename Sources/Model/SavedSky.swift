@@ -13,6 +13,10 @@ struct SavedSky: Codable, Identifiable, Hashable {
     let figureID: String?
     /// One entry per line. Skies kept before layering existed hold a single one.
     let lines: [[Int]]
+    /// The voice each line is played in, one per entry in `lines`. Skies kept
+    /// before there was more than one voice come back as Chime, which is what
+    /// they sounded like.
+    let voices: [Instrument]
     let name: String
     let myth: String
     let keptAt: Date
@@ -20,7 +24,7 @@ struct SavedSky: Codable, Identifiable, Hashable {
     /// `starCount` is the name the first version wrote; keeping the key means
     /// skies kept before figures existed still load.
     private enum CodingKeys: String, CodingKey {
-        case id, seed, lines, name, myth, keptAt, figureID
+        case id, seed, lines, voices, name, myth, keptAt, figureID
         case path                                   // what the first version wrote
         case fieldStarCount = "starCount"
     }
@@ -33,6 +37,7 @@ struct SavedSky: Codable, Identifiable, Hashable {
         try box.encode(fieldStarCount, forKey: .fieldStarCount)
         try box.encodeIfPresent(figureID, forKey: .figureID)
         try box.encode(lines, forKey: .lines)
+        try box.encode(voices, forKey: .voices)
         try box.encode(name, forKey: .name)
         try box.encode(myth, forKey: .myth)
         try box.encode(keptAt, forKey: .keptAt)
@@ -54,6 +59,13 @@ struct SavedSky: Codable, Identifiable, Hashable {
         } else {
             self.lines = [try box.decode([Int].self, forKey: .path)]
         }
+
+        // Anything kept before voices existed was played on the chime, and an
+        // entry whose voices have got out of step with its lines is repaired
+        // rather than dropped — a wrong instrument is a much smaller loss than
+        // a lost constellation.
+        let stored = (try box.decodeIfPresent([Instrument].self, forKey: .voices)) ?? []
+        self.voices = (0..<self.lines.count).map { stored.indices.contains($0) ? stored[$0] : .chime }
     }
 
     init(id: UUID = UUID(),
@@ -61,6 +73,7 @@ struct SavedSky: Codable, Identifiable, Hashable {
          fieldStarCount: Int,
          figureID: String? = nil,
          lines: [[Int]],
+         voices: [Instrument] = [],
          name: String,
          myth: String,
          keptAt: Date = Date()) {
@@ -69,6 +82,8 @@ struct SavedSky: Codable, Identifiable, Hashable {
         self.fieldStarCount = fieldStarCount
         self.figureID = figureID
         self.lines = lines
+        let provided = voices
+        self.voices = (0..<lines.count).map { provided.indices.contains($0) ? provided[$0] : .chime }
         self.name = name
         self.myth = myth
         self.keptAt = keptAt
@@ -95,6 +110,11 @@ struct SavedSky: Codable, Identifiable, Hashable {
     var constellations: [[Star]] {
         let stars = stars
         return lines.map { line in line.compactMap { stars.indices.contains($0) ? stars[$0] : nil } }
+    }
+
+    /// Rebuilt as the model holds them.
+    var savedLines: [Line] {
+        lines.indices.map { Line(stars: lines[$0], instrument: voices[$0]) }
     }
 
     /// The first line, for anything that only needs one shape.

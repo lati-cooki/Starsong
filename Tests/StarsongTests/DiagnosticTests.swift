@@ -88,6 +88,31 @@ final class SoundDiagnostics: XCTestCase {
         print("  of 20 drawn lines: \(swinging) have a rhythm, \(steady) come out steady")
     }
 
+    /// The numbers behind "do these actually sound different". Printed rather
+    /// than asserted; `InstrumentTests` holds the floor.
+    func testHowDifferentDoTheVoicesMeasure() {
+        func brightness(_ samples: [Float]) -> Double {
+            var crossings = 0
+            for i in 1..<samples.count where (samples[i] < 0) != (samples[i - 1] < 0) { crossings += 1 }
+            return Double(crossings) / Double(samples.count)
+        }
+        func rms(_ s: ArraySlice<Float>) -> Double {
+            (s.reduce(0.0) { $0 + Double($1) * Double($1) } / Double(s.count)).squareRoot()
+        }
+
+        print("VOICE-ANALYSIS at 440 Hz")
+        for instrument in Instrument.allCases {
+            let samples = instrument.samples(frequency: 440, duration: 1.5, sampleRate: 44_100)
+            let head = samples[0..<(samples.count / 5)]
+            let tail = samples[(samples.count * 3 / 5)...]
+            print(String(format: "  %-7@ brightness %.4f   head/tail %6.1f   peak %.2f",
+                         instrument.name as NSString,
+                         brightness(samples),
+                         rms(head) / Swift.max(rms(tail), 1e-9),
+                         samples.map { abs($0) }.max() ?? 0))
+        }
+    }
+
     func testHowManyVoicesALayeredCycleNeeds() {
         print("VOICE-ANALYSIS")
         // Every note of a cycle is scheduled at once, so a cycle claims one

@@ -99,3 +99,15 @@ struct Shooter: Identifiable {
 
     func hasFaded(at now: Date) -> Bool { now.timeIntervalSince(start) >= lifespan }
 }
+
+
+/// A constellation and the voice it is played in.
+///
+/// These travel together rather than as two arrays kept in step, because two
+/// arrays that must stay the same length are a bug waiting for the third place
+/// that forgets to update one of them.
+struct Line: Identifiable, Hashable {
+    let id = UUID()
+    var stars: [Int] = []
+    var instrument: Instrument = .chime
+}

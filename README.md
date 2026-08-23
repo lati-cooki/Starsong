@@ -72,12 +72,13 @@ swift Tools/make-icon.swift
 | `Sources/Model/SkyModel.swift` | The one piece of mutable state — sky, constellation, playback, naming |
 | `Sources/Model/SavedSky.swift` | A kept constellation: a seed, a star count, and the indices you connected |
 | `Sources/Model/SkyLog.swift` | The kept skies, as JSON on disk |
-| `Sources/Audio/Synth.swift` | Triangle + detuned sine through `AVAudioEngine`, notes scheduled on the audio clock |
+| `Sources/Audio/Instrument.swift` | The five voices. Every waveform is synthesised — there are no samples |
+| `Sources/Audio/Synth.swift` | `AVAudioEngine`, the pool of players, and the cache of rendered notes |
 | `Sources/Naming/Namer.swift` | The Claude call |
 | `Sources/Views/SkyCanvas.swift` | Drawing. A pure function of the state above plus the current time |
 | `Sources/Views/SkyLogView.swift` | The kept skies, with share and delete |
-| `Tests/StarsongTests` | 98 tests over the tunings, the rhythm, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
-| `Tests/StarsongUITests` | 6 tests over the accessibility tree and the drawing gesture, through the real UI |
+| `Tests/StarsongTests` | 116 tests over the tunings, the rhythm, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
+| `Tests/StarsongUITests` | 9 tests over the accessibility tree and the drawing gesture, through the real UI |
 
 Effects are **time-parametric**: a shooting star knows where it started, how
 fast it moves, and when it was born, so its position is a function of the clock
@@ -93,6 +94,35 @@ recomputed, so a sky kept on a phone reopens intact on a tablet.
 
 Entries are validated on load: an index pointing past the end of its sky would
 crash the renderer, so incoherent entries are dropped rather than trusted.
+
+## Voices
+
+Five, chosen per line, so a piano melody can run over a plucked one. There are
+no samples in the bundle — nothing here is a recording — and synthesis lands
+unevenly, so the names are as honest as they can be:
+
+- **Chime** — what the app started with, and still the default.
+- **Pluck** — Karplus-Strong: a burst of noise trapped in a loop one wavelength
+  long, low-passed a little each lap so the high frequencies die first, which is
+  what a real string does. The one that sounds like the thing it is named after.
+- **Piano** — a struck string with stretched partials. Nearer an electric piano
+  than a grand.
+- **Brass** — slow to speak, then blooms and holds, with a little vibrato.
+  Trumpet-*ish*.
+- **Bell** — partials that don't line up into a harmonic series.
+
+Karplus-Strong takes its pitch from the length of the delay line, and the line
+only holds so many samples of history: `line[index]` is the *oldest* and every
+step forward is newer, so interpolating toward the next slot **shortens** the
+delay. Getting that backwards made every note sharp, and worse the higher it
+went — 74 cents at the top of the sky. `InstrumentTests` measures the
+fundamental of the rendered buffer by autocorrelation and asserts it lands
+within 12 cents, with the peak interpolated, because one integer lag is 68 cents
+wide up there and a whole-bin answer could not have caught it.
+
+There is also a test that **fails if any two voices measure too alike**, on
+brightness and decay. Five tunings once shipped that were nearly the same scale
+because they were picked by ear; timbres get measured.
 
 ## Layers
 

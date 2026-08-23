@@ -4,8 +4,15 @@ import SwiftUI
 struct ContentView: View {
     @State private var model = SkyModel()
     @State private var log = SkyLog()
-    @State private var showingLog = false
-    @State private var showingAtlas = false
+    /// One sheet at a time. Stacking several `.sheet` modifiers on the same
+    /// view does not reliably work — the third one silently never presented —
+    /// so which sheet is up is a single piece of state.
+    @State private var sheet: Sheet?
+
+    enum Sheet: String, Identifiable {
+        case voices, atlas, log
+        var id: String { rawValue }
+    }
     @State private var skySize: CGSize = .zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let birth = Date()
@@ -37,11 +44,18 @@ struct ContentView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: model.connections)
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: model.notePulse)
         .sensoryFeedback(.success, trigger: model.myth?.name)
-        .sheet(isPresented: $showingLog) {
-            SkyLogView(log: log) { sky in model.restore(sky) }
-        }
-        .sheet(isPresented: $showingAtlas) {
-            AtlasView { figure in model.place(figure, for: skySize) }
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .voices:
+                InstrumentView(current: model.instrument,
+                               inUse: model.lines.map(\.instrument)) { voice in
+                    model.setInstrument(voice)
+                }
+            case .atlas:
+                AtlasView { figure in model.place(figure, for: skySize) }
+            case .log:
+                SkyLogView(log: log) { sky in model.restore(sky) }
+            }
         }
     }
 
@@ -109,6 +123,7 @@ struct ContentView: View {
                 .font(.system(size: 32, design: .serif))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
+            voicesButton
             atlasButton
             if !log.isEmpty { logButton }
         }
@@ -116,8 +131,23 @@ struct ContentView: View {
         .padding(.horizontal, 22)
     }
 
+    private var voicesButton: some View {
+        Button { sheet = .voices } label: {
+            Image(systemName: "waveform")
+                .font(.system(size: 14))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.08), in: Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.18)))
+                .foregroundStyle(Palette.line(model.activeLine))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Voices")
+        .accessibilityValue(model.instrument.name)
+    }
+
     private var atlasButton: some View {
-        Button { showingAtlas = true } label: {
+        Button { sheet = .atlas } label: {
             Image(systemName: "point.3.connected.trianglepath.dotted")
                 .font(.system(size: 14))
                 .padding(.horizontal, 11)
@@ -132,7 +162,7 @@ struct ContentView: View {
 
     /// Only appears once there's something to look back at.
     private var logButton: some View {
-        Button { showingLog = true } label: {
+        Button { sheet = .log } label: {
             HStack(spacing: 5) {
                 Image(systemName: "sparkles").font(.system(size: 12))
                 Text("\(log.count)").font(.system(size: 14, weight: .semibold))
@@ -182,7 +212,7 @@ struct ContentView: View {
     /// This night's key signature. It changes with every new sky.
     private var tuningCaption: some View {
         HStack {
-            Text(model.tuning.name.uppercased())
+            Text("\(model.instrument.name) · \(model.tuning.name)".uppercased())
                 .font(.system(size: 10, weight: .medium))
                 .tracking(1.8)
                 .foregroundStyle(Palette.ink.opacity(0.35))
@@ -190,7 +220,7 @@ struct ContentView: View {
         }
         .padding(.horizontal, 24)
         .padding(.top, 2)
-        .accessibilityLabel("Tuned to \(model.tuning.name)")
+        .accessibilityLabel("\(model.instrument.name), tuned to \(model.tuning.name)")
     }
 
     private var hint: some View {

@@ -74,7 +74,7 @@ struct SkyLogView: View {
                     .foregroundStyle(Palette.ink.opacity(0.4))
             }
             Spacer(minLength: 0)
-            HearButton { SkyModel.preview(sky.constellations, tuning: sky.tuning) }
+            HearButton { SkyModel.preview(sky.constellations, tuning: sky.tuning, voices: sky.voices) }
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())

@@ -1,10 +1,11 @@
 import AVFoundation
 import Foundation
 
-/// Tiny additive synth: a triangle with a detuned octave-ish sine on top and a
-/// soft exponential envelope. Voices are attached once and reused round-robin,
-/// and notes are scheduled on the audio clock rather than a dispatch timer, so
-/// a melody keeps its rhythm even when the main thread is busy drawing.
+/// Renders and schedules notes. The waveforms live in `Instrument`; this owns
+/// the engine, the pool of players, and the cache of rendered notes. Voices are
+/// attached once and reused round-robin, and notes are scheduled on the audio
+/// clock rather than a dispatch timer, so a melody keeps its rhythm even when
+/// the main thread is busy drawing.
 final class Synth {
     static let shared = Synth()
 
@@ -29,9 +30,15 @@ final class Synth {
     /// sounded, and a wrapped round-robin would `stop()` a note still waiting
     /// to play. Sized for the worst case with room to ring.
     private static let voiceCount = 48
-    private static let cacheLimit = 64
+    /// Bounded by bytes rather than by entries. A 2.4-second note is about
+    /// 400 kB, a short one a tenth of that, so counting entries makes the real
+    /// ceiling swing by an order of magnitude — and five voices multiply
+    /// however many distinct notes are in play.
+    private static let cacheBudget = 24 * 1_024 * 1_024
+    private var cachedBytes = 0
 
     private struct Tone: Hashable {
+        let instrument: Instrument
         let frequency: Int   // centihertz
         let duration: Int    // milliseconds
         let volume: Int      // 1/1000ths
@@ -61,6 +68,7 @@ final class Synth {
 
     /// Schedule a note. `delay` is measured from now, on the audio clock.
     func ping(_ frequency: Double,
+              instrument: Instrument = .chime,
               delay: TimeInterval = 0,
               duration: Double = 0.9,
               volume: Float = 0.25) {
@@ -77,7 +85,8 @@ final class Synth {
             // A player node raises if it is started while the engine is down.
             guard engine.isRunning else { return }
 
-            let buffer = buffer(frequency: frequency, duration: duration, volume: volume)
+            let buffer = buffer(instrument: instrument, frequency: frequency,
+                            duration: duration, volume: volume)
             let voice = checkoutVoice()
             voice.stop()
             voice.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
@@ -100,8 +109,10 @@ final class Synth {
 
     // MARK: - Rendering
 
-    private func buffer(frequency: Double, duration: Double, volume: Float) -> AVAudioPCMBuffer {
-        let tone = Tone(frequency: Int((frequency * 100).rounded()),
+    private func buffer(instrument: Instrument, frequency: Double,
+                        duration: Double, volume: Float) -> AVAudioPCMBuffer {
+        let tone = Tone(instrument: instrument,
+                        frequency: Int((frequency * 100).rounded()),
                         duration: Int((duration * 1000).rounded()),
                         volume: Int((volume * 1000).rounded()))
 
@@ -112,38 +123,33 @@ final class Synth {
         }
         lock.unlock()
 
-        let rendered = render(frequency: frequency, duration: duration, volume: volume)
+        let rendered = render(instrument: instrument, frequency: frequency,
+                              duration: duration, volume: volume)
+        let bytes = Int(rendered.frameLength) * MemoryLayout<Float>.size
 
         lock.lock()
-        if cache.count >= Self.cacheLimit { cache.removeAll(keepingCapacity: true) }
+        if cachedBytes + bytes > Self.cacheBudget {
+            cache.removeAll(keepingCapacity: true)
+            cachedBytes = 0
+        }
         cache[tone] = rendered
+        cachedBytes += bytes
         lock.unlock()
 
         return rendered
     }
 
-    private func render(frequency: Double, duration: Double, volume: Float) -> AVAudioPCMBuffer {
-        let sampleRate = format.sampleRate
-        let frames = AVAudioFrameCount(duration * sampleRate)
-        // frameCapacity of 0 is invalid, and the guard in `ping` keeps duration > 0.
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: max(frames, 1))!
+    private func render(instrument: Instrument, frequency: Double,
+                        duration: Double, volume: Float) -> AVAudioPCMBuffer {
+        let voice = instrument.samples(frequency: frequency, duration: duration,
+                                       sampleRate: format.sampleRate)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format,
+                                      frameCapacity: AVAudioFrameCount(max(voice.count, 1)))!
         buffer.frameLength = buffer.frameCapacity
 
         let samples = buffer.floatChannelData![0]
-        let attack = 0.02
-        let release = 0.04
-        let decay = 5.0
-
-        for i in 0..<Int(buffer.frameLength) {
-            let t = Double(i) / sampleRate
-            let remaining = duration - t
-            let envelope = min(1, t / attack)
-                * min(1, max(0, remaining) / release)   // avoid a click at the tail
-                * exp(-t * decay)
-            let triangle = 2 / Double.pi * asin(sin(2 * .pi * frequency * t))
-            let shimmer = sin(2 * .pi * frequency * 2.01 * t) * 0.35
-            samples[i] = Float((triangle + shimmer) * envelope) * volume
-        }
+        for i in 0..<voice.count { samples[i] = voice[i] * volume }
+        if voice.isEmpty { samples[0] = 0 }
         return buffer
     }
 

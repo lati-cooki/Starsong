@@ -44,15 +44,15 @@ enum Namer {
     }
 
     /// Never throws: a sky that can't reach the network still gets a name.
-    static func myth(for lines: [[Star]]) async -> Myth {
+    static func myth(for lines: [[Star]], voices: [Instrument] = []) async -> Myth {
         do {
-            return try await requestMyth(for: lines)
+            return try await requestMyth(for: lines, voices: voices)
         } catch {
             return unnamed
         }
     }
 
-    static func requestMyth(for lines: [[Star]]) async throws -> Myth {
+    static func requestMyth(for lines: [[Star]], voices: [Instrument] = []) async throws -> Myth {
         guard let apiKey else { throw Failure.missingKey }
 
         var request = URLRequest(url: endpoint)
@@ -63,7 +63,7 @@ enum Namer {
         // Server-side fallback: if a safety classifier declines the turn, the
         // API re-routes to a capable fallback model instead of returning nothing.
         request.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body(for: lines))
+        request.httpBody = try JSONSerialization.data(withJSONObject: body(for: lines, voices: voices))
 
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -74,9 +74,10 @@ enum Namer {
 
     // MARK: - Request
 
-    static func prompt(for lines: [[Star]]) -> String {
+    static func prompt(for lines: [[Star]], voices: [Instrument] = []) -> String {
         let drawn = lines.filter { $0.count >= 2 }
         let strokes = drawn.enumerated().map { index, stars -> String in
+            let voice = index < voices.count ? " on a \(voices[index].name.lowercased())" : ""
             let points = stars
                 .map { "(\(Int(($0.x * 100).rounded())),\(Int(($0.y * 100).rounded())))" }
                 .joined(separator: " ")
@@ -84,7 +85,7 @@ enum Namer {
                 .map { String(Int(Music.pitch(forY: $0.y).rounded())) }
                 .joined(separator: ", ")
             let label = drawn.count > 1 ? "Line \(index + 1)" : "The line"
-            return "\(label): \(stars.count) stars at \(points), played as \(pitches) Hz."
+            return "\(label)\(voice): \(stars.count) stars at \(points), played as \(pitches) Hz."
         }.joined(separator: "\n")
 
         let together = drawn.count > 1
@@ -107,7 +108,7 @@ enum Namer {
         """
     }
 
-    private static func body(for lines: [[Star]]) -> [String: Any] {
+    private static func body(for lines: [[Star]], voices: [Instrument]) -> [String: Any] {
         [
             "model": model,
             "max_tokens": 4_096,
@@ -129,7 +130,7 @@ enum Namer {
                     ]
                 ]
             ],
-            "messages": [["role": "user", "content": prompt(for: lines)]]
+            "messages": [["role": "user", "content": prompt(for: lines, voices: voices)]]
         ]
     }
 

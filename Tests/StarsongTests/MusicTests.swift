@@ -30,7 +30,7 @@ final class MusicTests: XCTestCase {
 
     func testEveryDegreeLandsOnThePentatonicScale() {
         for degree in 0...Music.range {
-            let y = 1 - (CGFloat(degree) - 0.5) / CGFloat(Music.range)
+            let y = 1 - CGFloat(degree) / CGFloat(Music.range)
             let semitonesAboveRoot = 12 * log2(Music.pitch(forY: y) / Music.rootFrequency)
             let pitchClass = Int(semitonesAboveRoot.rounded()) % 12
             XCTAssertTrue(Music.scale.contains(pitchClass),

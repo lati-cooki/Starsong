@@ -11,13 +11,18 @@ enum Music {
         let degrees: [Int]
     }
 
+    /// Chosen by search rather than by ear, because picking them by ear went
+    /// wrong twice: the first six included pairs differing in 2 notes of 15
+    /// across the whole sky, which is not a different mood, it is the same one
+    /// with a wobble. These five are the set whose *most similar* pair still
+    /// differs in 6 notes of 15. `TuningTests` holds the floor at 5 so this
+    /// cannot regress by eyeball again.
     static let tunings: [Tuning] = [
         Tuning(id: "major",     name: "Major pentatonic", degrees: [0, 2, 4, 7, 9]),
         Tuning(id: "minor",     name: "Minor pentatonic", degrees: [0, 3, 5, 7, 10]),
-        Tuning(id: "ritusen",   name: "Ritusen",          degrees: [0, 2, 5, 7, 9]),
-        Tuning(id: "kumoi",     name: "Kumoi",            degrees: [0, 2, 3, 7, 9]),
         Tuning(id: "hirajoshi", name: "Hirajoshi",        degrees: [0, 2, 3, 7, 8]),
-        Tuning(id: "egyptian",  name: "Egyptian",         degrees: [0, 2, 5, 7, 10])
+        Tuning(id: "in",        name: "In",               degrees: [0, 1, 5, 7, 8]),
+        Tuning(id: "balinese",  name: "Balinese",         degrees: [0, 1, 3, 7, 10])
     ]
 
     static let `default` = tunings[0]
@@ -63,19 +68,42 @@ enum Music {
 
     // MARK: - Time
 
-    /// A constellation's shape is also its rhythm: stars that sit close together
-    /// tumble out quickly, a long reach across the sky holds.
-    static let shortestGap = 0.14
-    static let longestGap = 0.70
-    static let gapPerSkyLength = 0.80
+    /// A constellation's shape is also its rhythm — but only if the shape has
+    /// any variety in it. Mapping distance straight onto time did not work:
+    /// measured on hand-drawn lines, consecutive stars sit so evenly that every
+    /// gap came out within a few percent of every other, which is a metronome,
+    /// not a rhythm.
+    ///
+    /// So gaps are **note values** — half, one or two pulses — chosen by where
+    /// each reach falls within *that line's own* range of reaches. Discrete
+    /// values are what makes a rhythm audible; a continuum just jitters. And a
+    /// shared pulse means layered lines lock to one tempo while running to
+    /// different lengths, which is polymeter rather than drift.
+    static let pulse = 0.30
+    static let noteValues = [0.5, 1.0, 2.0]
+
+    static var shortestGap: Double { pulse * noteValues.first! }
+    static var longestGap: Double { pulse * noteValues.last! }
+
+    /// A line whose hops are all much of a muchness is a steady line, and it
+    /// should sound like one. Amplifying a five-percent wobble into a rhythm
+    /// would be inventing one that was never drawn.
+    static let evennessTolerance = 1.25
 
     /// The pause before each note. The first has none.
     static func gaps(between stars: [Star]) -> [Double] {
         guard !stars.isEmpty else { return [] }
+        let reaches = zip(stars, stars.dropFirst())
+            .map { Double(hypot($1.x - $0.x, $1.y - $0.y)) }
+        guard let shortest = reaches.min(), let longest = reaches.max() else { return [0] }
+
+        let isSteady = longest <= shortest * evennessTolerance
         var gaps = [0.0]
-        for (previous, next) in zip(stars, stars.dropFirst()) {
-            let reach = Double(hypot(next.x - previous.x, next.y - previous.y))
-            gaps.append(min(shortestGap + gapPerSkyLength * reach, longestGap))
+        for reach in reaches {
+            guard !isSteady else { gaps.append(pulse); continue }
+            let position = (reach - shortest) / (longest - shortest)
+            let step = min(Int(position * Double(noteValues.count)), noteValues.count - 1)
+            gaps.append(pulse * noteValues[step])
         }
         return gaps
     }
@@ -90,12 +118,12 @@ enum Music {
     }
 
     /// The breath at the end of a loop, before it comes round again.
-    static let loopRest = 0.55
+    static var loopRest: Double { pulse * 2 }
 
-    /// One time round: the last note, its ring, and a breath.
+    /// One time round, in whole pulses, so layered lines stay on one grid.
     static func cycleLength(for stars: [Star]) -> Double {
         guard let last = schedule(for: stars).last else { return loopRest }
-        return last + longestGap + loopRest
+        return last + pulse * 2
     }
 
     /// A note rings a little past the one that follows it.

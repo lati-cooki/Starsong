@@ -6,10 +6,37 @@ final class RhythmTests: XCTestCase {
         Star(x: x, y: y, radius: 1, phase: 0, isBright: false)
     }
 
-    func testStarsFurtherApartLeaveALongerPause() {
-        let close = [star(0.5, 0.5), star(0.52, 0.5)]
-        let far = [star(0.1, 0.1), star(0.9, 0.8)]
-        XCTAssertLessThan(Music.gaps(between: close)[1], Music.gaps(between: far)[1])
+    /// Rhythm is relative to the line it is in: the longest reach in *this*
+    /// constellation gets the long note, whatever that reach measures. So the
+    /// comparison has to be within one line, not between two.
+    func testTheLongestReachInALineGetsTheLongestNote() {
+        let line = [star(0.10, 0.50), star(0.14, 0.50),   // a short hop
+                    star(0.90, 0.50),                      // a long one
+                    star(0.95, 0.50)]                      // short again
+        let gaps = Music.gaps(between: line)
+        XCTAssertEqual(gaps[1], Music.shortestGap, accuracy: 1e-9)
+        XCTAssertEqual(gaps[2], Music.longestGap, accuracy: 1e-9)
+        XCTAssertEqual(gaps[3], Music.shortestGap, accuracy: 1e-9)
+    }
+
+    /// A line drawn with even spacing is a steady line and should sound steady.
+    /// Stretching a few percent of wobble into a rhythm would invent one.
+    func testAnEvenlyDrawnLineKeepsASteadyPulse() {
+        let even = (0..<5).map { star(0.15 + CGFloat($0) * 0.17, 0.4) }
+        let gaps = Music.gaps(between: even).dropFirst()
+        XCTAssertTrue(gaps.allSatisfy { abs($0 - Music.pulse) < 1e-9 },
+                      "an even line should tick, not swing: \(Array(gaps))")
+    }
+
+    /// And the values it does use are proper note lengths, not a continuum —
+    /// which is what makes the difference audible at all.
+    func testGapsAreWholeNoteValues() {
+        let ragged = [star(0.1, 0.2), star(0.15, 0.25), star(0.8, 0.7),
+                      star(0.85, 0.72), star(0.3, 0.3), star(0.75, 0.6)]
+        let allowed = Music.noteValues.map { Music.pulse * $0 }
+        for gap in Music.gaps(between: ragged).dropFirst() {
+            XCTAssertTrue(allowed.contains { abs($0 - gap) < 1e-9 }, "\(gap) is not a note value")
+        }
     }
 
     func testGapsAreBoundedAndTheFirstNoteIsImmediate() {
@@ -87,14 +114,30 @@ final class TuningTests: XCTestCase {
         }
     }
 
-    func testNoTwoTuningsAreTheSameScale() {
-        let heights = stride(from: 0.0, through: 1.0, by: 0.02).map { CGFloat($0) }
-        var melodies = Set<[Int]>()
-        for tuning in Music.tunings {
-            let sweep = heights.map { Int(Music.pitch(forY: $0, in: tuning).rounded()) }
-            melodies.insert(sweep)
+    /// Not just "different" — *audibly* different. Two scales that diverge on
+    /// two notes out of fifteen sound like one scale, which is exactly the trap
+    /// this set fell into twice before it was chosen by search.
+    func testEveryPairOfTuningsIsAudiblyDifferent() {
+        // One star per scale degree, so the comparison covers the whole sky.
+        let sky = (0...Music.range).map { degree -> CGFloat in
+            1 - CGFloat(degree) / CGFloat(Music.range)
         }
-        XCTAssertEqual(melodies.count, Music.tunings.count, "two tunings are the same scale")
+        func notes(_ tuning: Music.Tuning) -> [Int] {
+            sky.map { Int((69 + 12 * log2(Music.pitch(forY: $0, in: tuning) / 440)).rounded()) }
+        }
+
+        var worst = (pair: "", differing: Int.max)
+        for i in Music.tunings.indices {
+            for j in (i + 1)..<Music.tunings.count {
+                let a = Music.tunings[i], b = Music.tunings[j]
+                let differing = zip(notes(a), notes(b)).filter { $0 != $1 }.count
+                if differing < worst.differing {
+                    worst = ("\(a.name) vs \(b.name)", differing)
+                }
+            }
+        }
+        XCTAssertGreaterThanOrEqual(worst.differing, 5,
+                                    "\(worst.pair) differ in only \(worst.differing) of \(sky.count) notes")
     }
 
     func testPitchStaysMonotonicInEveryTuning() {

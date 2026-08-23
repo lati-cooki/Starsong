@@ -61,7 +61,7 @@ swift Tools/make-icon.swift
 | | |
 |---|---|
 | `Sources/Model/Star.swift` | Stars, pulses, shooting stars — all positions are 0–1 fractions of the sky, so rotating the device keeps a constellation intact |
-| `Sources/Model/Music.swift` | Six pentatonic tunings, and the rhythm a shape implies |
+| `Sources/Model/Music.swift` | Five pentatonic tunings, and the rhythm a shape implies |
 | `Sources/Model/Atlas.swift` | Eight real constellations, by catalogue position |
 | `Sources/Model/SkyModel.swift` | The one piece of mutable state — sky, constellation, playback, naming |
 | `Sources/Model/SavedSky.swift` | A kept constellation: a seed, a star count, and the indices you connected |
@@ -70,7 +70,7 @@ swift Tools/make-icon.swift
 | `Sources/Naming/Namer.swift` | The Claude call |
 | `Sources/Views/SkyCanvas.swift` | Drawing. A pure function of the state above plus the current time |
 | `Sources/Views/SkyLogView.swift` | The kept skies, with share and delete |
-| `Tests/StarsongTests` | 92 tests over the tunings, the rhythm, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
+| `Tests/StarsongTests` | 98 tests over the tunings, the rhythm, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
 | `Tests/StarsongUITests` | 6 tests over the accessibility tree and the drawing gesture, through the real UI |
 
 Effects are **time-parametric**: a shooting star knows where it started, how
@@ -107,16 +107,40 @@ drawing, and an empty line disappears, handing you back the one below.
 ## Shape is melody, and shape is also rhythm
 
 A constellation's pitches come from how high its stars sit. Its **rhythm** comes
-from how far apart they are: the gap before each note grows with the reach from
-the last star, clamped so nothing drags. Orion's belt — three stars almost on top
-of one another — tumbles out roughly three times faster than the long stretch
-down from his shoulder. Two constellations with the same notes in the same order
-still sound like different pieces of music.
+from how far apart they are — but the first attempt at this shipped a metronome,
+and it is worth saying why, because the mistake is easy to repeat.
 
-Each night is also tuned by its own seed, drawn from six pentatonic scales. They
-all share a root and a fifth on purpose, so a new sky sounds like a new mood
-rather than a different instrument. The current one is printed under the wordmark
-like a key signature.
+Mapping distance straight onto time sounds obviously right and does not work.
+Measured on drawn lines, every gap came out within a few percent of every other:
+
+    tight cluster   0.18 0.18 0.18     spread x1.02
+    typical drag    0.26 0.26 0.27     spread x1.04
+
+Tempo varied between constellations, so reasoning about it felt convincing, but
+inside any one line there was nothing to hear. Two fixes: gaps are now **note
+values** — half, one, or two pulses — because a rhythm needs discrete categories
+and a continuum just jitters; and each reach is judged against *that line's own*
+range rather than an absolute scale, so a cramped constellation swings as much as
+a sprawling one. A line drawn with even spacing still ticks steadily, which is
+honest — it is an even line.
+
+    Orion           0.60 0.30 0.60 0.60 0.15 0.15 0.60   spread x4.00
+    drawn by drag   0.15 0.30 0.15 0.60 0.60 0.15
+
+The shared pulse also means layered lines lock to one tempo while running to
+different lengths — polymeter rather than drift.
+
+Each night is tuned by its own seed. The scales were **chosen by search, not by
+ear**, because ear picked badly twice: the first set had pairs differing in 2
+notes out of 15 across the whole sky, which is not a different mood, it is the
+same one with a wobble. The five that remain have a worst pair differing in 6 of
+15, and `TuningTests` holds that floor. The current one is printed under the
+wordmark like a key signature.
+
+`SoundDiagnostics` is not a test suite so much as a set of measurements — it
+prints the tuning distances, the gap patterns for a range of shapes, and what
+twenty simulated finger-drags actually produce. Run it before changing any of
+these numbers.
 
 ## Real constellations
 

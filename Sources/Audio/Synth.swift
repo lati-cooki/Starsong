@@ -24,7 +24,11 @@ final class Synth {
     /// instead of running on whichever thread happened to ask for a note.
     private let sessionQueue = DispatchQueue(label: "com.starsong.synth.session")
 
-    private static let voiceCount = 16
+    /// A whole cycle is scheduled at once, so each line claims one voice per
+    /// note immediately. Three ten-note lines is thirty before anything has
+    /// sounded, and a wrapped round-robin would `stop()` a note still waiting
+    /// to play. Sized for the worst case with room to ring.
+    private static let voiceCount = 48
     private static let cacheLimit = 64
 
     private struct Tone: Hashable {

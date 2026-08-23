@@ -77,7 +77,7 @@ swift Tools/make-icon.swift
 | `Sources/Naming/Namer.swift` | The Claude call |
 | `Sources/Views/SkyCanvas.swift` | Drawing. A pure function of the state above plus the current time |
 | `Sources/Views/SkyLogView.swift` | The kept skies, with share and delete |
-| `Tests/StarsongTests` | 116 tests over the tunings, the rhythm, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
+| `Tests/StarsongTests` | 120 tests over the tunings, the rhythm, the haptics, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
 | `Tests/StarsongUITests` | 9 tests over the accessibility tree and the drawing gesture, through the real UI |
 
 Effects are **time-parametric**: a shooting star knows where it started, how

@@ -413,11 +413,12 @@ final class SkyModel {
                                 line: line))
         }
 
-        // Only the first line ticks, or layering would buzz continuously.
+        // Only the first line ticks, or layering would buzz continuously —
+        // and only on the beats far enough apart to read as a pulse.
         if line == 0 {
             Task { [weak self] in
                 var elapsed = 0.0
-                for start in starts {
+                for start in Music.feltBeats(in: starts) {
                     try? await Task.sleep(nanoseconds: UInt64(max(start - elapsed, 0) * 1_000_000_000))
                     guard !Task.isCancelled, self?.isPlaying == true else { return }
                     elapsed = start

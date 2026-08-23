@@ -134,4 +134,29 @@ enum Music {
             return next + 0.9
         }
     }
+
+    // MARK: - What you feel
+
+    /// The Taptic Engine is not an instrument. A quick line's notes land a
+    /// `shortestGap` apart — 0.15s — and a tap on every one of them is a buzz
+    /// rather than a pulse: too fast to read as rhythm, and enough sustained
+    /// churn on the shared feedback engine to cost battery and drop its
+    /// connection to `hapticd` mid-loop.
+    static let hapticFloor = 0.25
+
+    /// The beats of a schedule worth feeling, thinned so no two taps land
+    /// closer than `hapticFloor`. The downbeat is always one of them, and
+    /// because `pulse` is above the floor a steady line keeps every note —
+    /// only the sixteenths get skipped.
+    static func feltBeats(in starts: [Double]) -> [Double] {
+        var kept: [Double] = []
+        for start in starts {
+            guard let last = kept.last else {
+                kept.append(start)
+                continue
+            }
+            if start - last >= hapticFloor { kept.append(start) }
+        }
+        return kept
+    }
 }

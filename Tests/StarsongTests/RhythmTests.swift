@@ -82,6 +82,53 @@ final class RhythmTests: XCTestCase {
         XCTAssertLessThan(alongTheBelt, shoulderToBelt * 0.75,
                           "the belt should be noticeably faster than the reach into it")
     }
+
+    /// The Taptic Engine gets a thinned version of the rhythm. A tap on every
+    /// note of a quick line is a buzz, not a pulse, and it saturates a feedback
+    /// engine that is shared with the rest of the system.
+    func testQuickBeatsAreThinnedToSomethingYouCanFeel() {
+        let quick = [star(0.10, 0.5), star(0.13, 0.5), star(0.16, 0.5),
+                     star(0.19, 0.5), star(0.90, 0.5)]
+        let starts = Music.schedule(for: quick)
+        let felt = Music.feltBeats(in: starts)
+
+        XCTAssertEqual(felt.first, 0, "the downbeat is always felt")
+        XCTAssertLessThan(felt.count, starts.count, "a line of sixteenths should be thinned")
+        XCTAssertTrue(felt.allSatisfy { starts.contains($0) }, "taps land on notes that sound")
+        for (a, b) in zip(felt, felt.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(b - a, Music.hapticFloor, "taps at \(a) and \(b) are too close")
+        }
+    }
+
+    /// Thinning is only meant to catch the sixteenths — a line already moving at
+    /// the pulse is felt note for note, so the rhythm you hear is the one you
+    /// feel.
+    func testASteadyLineIsFeltOnEveryNote() {
+        XCTAssertGreaterThanOrEqual(Music.pulse, Music.hapticFloor,
+                                    "the pulse itself must survive thinning")
+        let even = (0..<5).map { star(0.15 + CGFloat($0) * 0.17, 0.4) }
+        let starts = Music.schedule(for: even)
+        XCTAssertEqual(Music.feltBeats(in: starts), starts)
+    }
+
+    /// A loop coming round again must not tap on top of the tap that ended the
+    /// last time through.
+    func testTheLoopSeamIsNotATrill() {
+        let lines = [[star(0.1, 0.2), star(0.9, 0.8)],
+                     (0..<7).map { star(0.1 + CGFloat($0) * 0.02, 0.5) },
+                     Atlas.orion.walk.map { Atlas.orion.placedStars()[$0] }]
+        for notes in lines {
+            let felt = Music.feltBeats(in: Music.schedule(for: notes))
+            let seam = Music.cycleLength(for: notes) - (felt.last ?? 0)
+            XCTAssertGreaterThanOrEqual(seam, Music.hapticFloor,
+                                        "the downbeat lands \(seam)s after the last tap")
+        }
+    }
+
+    func testFeltBeatsOfAnEmptyMelody() {
+        XCTAssertTrue(Music.feltBeats(in: []).isEmpty)
+        XCTAssertEqual(Music.feltBeats(in: [0]), [0])
+    }
 }
 
 final class TuningTests: XCTestCase {

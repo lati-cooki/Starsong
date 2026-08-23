@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__xcode-tools__UpdateTargetBuildSetting",
+      "mcp__xcode-tools__AddInfoPlist",
+      "mcp__xcode-tools__AddEntitlement",
+      "mcp__xcode-tools__UpdateFileCompilerFlags",
+      "mcp__xcode-tools__XcodeNewTarget",
+      "Edit(Starsong.xcodeproj/**)",
+      "Write(Starsong.xcodeproj/**)"
+    ],
+    "ask": [
+      "mcp__xcode-tools__XcodeSwitchRunDestination",
+      "mcp__xcode-tools__XcodeSwitchScheme",
+      "Bash(xcodegen:*)"
+    ]
+  }
+}

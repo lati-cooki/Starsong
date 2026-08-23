@@ -15,6 +15,11 @@ settings:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     CODE_SIGN_STYLE: Automatic
+    # Set here rather than in Xcode: the .xcodeproj is generated and git-ignored,
+    # so a team picked in Signing & Capabilities is lost on the next regenerate.
+    # Project-wide so the test bundles get it too — without it, building for
+    # testing against a device fails to sign.
+    DEVELOPMENT_TEAM: FNUEYV4H8Q
 
 targets:
   Starsong:

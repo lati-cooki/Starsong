@@ -1,0 +1,88 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Printed so a failure caused by a runner image change is obvious at a
+      # glance rather than after twenty minutes of guessing.
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes | grep -i ios || true
+
+      # xcbeautify is not guaranteed on every runner image, so install it
+      # rather than assuming it and getting a silent pipe failure.
+      - name: Install tools
+        run: brew install xcodegen xcbeautify
+
+      # The project is generated, never committed.
+      - name: Generate project
+        run: xcodegen generate
+
+      # Runner images come and go, and hardcoding a device name is the usual
+      # way these workflows rot. Take whatever iPhone this image actually has.
+      - name: Choose a simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available \
+            | grep -Eo 'iPhone[^(]*\(([-0-9A-F]{36})\)' \
+            | head -1 | grep -Eo '[-0-9A-F]{36}')
+          if [ -z "$udid" ]; then
+            echo "No iPhone simulator on this runner:"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          xcrun simctl list devices available | grep "$udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      # Unit and UI tests run as separate steps so a flaky UI launch is
+      # instantly distinguishable from a real logic failure.
+      - name: Unit tests
+        shell: bash
+        run: |
+          xcodebuild test \
+            -project Starsong.xcodeproj \
+            -scheme Starsong \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -only-testing:StarsongTests \
+            -resultBundlePath UnitTests.xcresult \
+            | xcbeautify
+
+      - name: UI tests
+        shell: bash
+        run: |
+          xcodebuild test \
+            -project Starsong.xcodeproj \
+            -scheme Starsong \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -only-testing:StarsongUITests \
+            -resultBundlePath UITests.xcresult \
+            | xcbeautify
+
+      # The app icon is generated rather than committed, so the generator has to
+      # keep working too.
+      - name: Icon generator still runs
+        run: swift Tools/make-icon.swift /tmp/icon-check.png
+
+      - name: Upload results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresults
+          path: "*.xcresult"
+          retention-days: 7

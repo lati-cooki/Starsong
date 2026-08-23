@@ -1,5 +1,7 @@
 # Starsong for iOS
 
+[![Tests](https://github.com/lati-cooki/Starsong/actions/workflows/tests.yml/badge.svg)](https://github.com/lati-cooki/Starsong/actions/workflows/tests.yml)
+
 Tap or drag across stars to draw a constellation. Each star sings a note — higher
 stars sing higher, and stars that sit close together tumble out quickly — and
 Claude will name the figure you drew and tell its story. Keep the ones you like;
@@ -23,8 +25,12 @@ hardware than in the simulator.
 Command line, if you prefer:
 
 ```bash
-xcodebuild -project Starsong.xcodeproj -scheme Starsong -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+xcodegen generate && xcodebuild -project Starsong.xcodeproj -scheme Starsong -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
+
+CI runs the same thing on every push — see `.github/workflows/tests.yml`. It
+picks whatever iPhone simulator the runner happens to have rather than naming
+one, since that is the usual way these workflows rot.
 
 ## Naming constellations
 

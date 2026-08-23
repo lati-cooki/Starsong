@@ -1,0 +1,202 @@
+# Starsong for iOS
+
+Tap or drag across stars to draw a constellation. Each star sings a note — higher
+stars sing higher, and stars that sit close together tumble out quickly — and
+Claude will name the figure you drew and tell its story. Keep the ones you like;
+the sky they were drawn on comes back with them. Or pick a real constellation and
+hear what Orion sounds like.
+
+Native SwiftUI. iOS 17+, iPhone and iPad.
+
+## Build and run
+
+The Xcode project is generated from `project.yml`, so it never has to be
+committed or merged:
+
+```bash
+brew install xcodegen && xcodegen generate && open Starsong.xcodeproj
+```
+
+Then pick a simulator or your device and hit Run. Audio is much nicer on
+hardware than in the simulator.
+
+Command line, if you prefer:
+
+```bash
+xcodebuild -project Starsong.xcodeproj -scheme Starsong -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+```
+
+## Naming constellations
+
+"Name it" calls the Claude API. Without a key the app still works — it falls
+back to a local story — so this step is optional.
+
+```bash
+cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
+```
+
+Put your key in that file (`ANTHROPIC_API_KEY = sk-ant-...`); it is git-ignored
+and feeds `Info.plist` through the xcconfig. Don't quote the value or add a
+trailing comment — xcconfig treats `//` as the start of a comment.
+
+That is fine for a toy on your own device. **Anything you ship should call your
+own server instead**, so the key never leaves it: an app binary is not a secret,
+and a key inside one can be extracted.
+
+The request uses Claude Opus 5 with [structured
+outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs),
+so the name and myth arrive as schema-checked JSON rather than prose to be
+regex'd. Server-side fallback is enabled, and a refusal or a network failure
+lands on the local story instead of an error.
+
+The app icon is generated rather than checked in by hand — edit the drawing and
+re-run it:
+
+```bash
+swift Tools/make-icon.swift
+```
+
+## How it fits together
+
+| | |
+|---|---|
+| `Sources/Model/Star.swift` | Stars, pulses, shooting stars — all positions are 0–1 fractions of the sky, so rotating the device keeps a constellation intact |
+| `Sources/Model/Music.swift` | Six pentatonic tunings, and the rhythm a shape implies |
+| `Sources/Model/Atlas.swift` | Eight real constellations, by catalogue position |
+| `Sources/Model/SkyModel.swift` | The one piece of mutable state — sky, constellation, playback, naming |
+| `Sources/Model/SavedSky.swift` | A kept constellation: a seed, a star count, and the indices you connected |
+| `Sources/Model/SkyLog.swift` | The kept skies, as JSON on disk |
+| `Sources/Audio/Synth.swift` | Triangle + detuned sine through `AVAudioEngine`, notes scheduled on the audio clock |
+| `Sources/Naming/Namer.swift` | The Claude call |
+| `Sources/Views/SkyCanvas.swift` | Drawing. A pure function of the state above plus the current time |
+| `Sources/Views/SkyLogView.swift` | The kept skies, with share and delete |
+| `Tests/StarsongTests` | 92 tests over the tunings, the rhythm, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
+| `Tests/StarsongUITests` | 6 tests over the accessibility tree and the drawing gesture, through the real UI |
+
+Effects are **time-parametric**: a shooting star knows where it started, how
+fast it moves, and when it was born, so its position is a function of the clock
+rather than an accumulation of per-frame steps. Nothing mutates state during a
+draw pass, and motion looks the same at 60 Hz and 120 Hz. Playback leans on the
+same property — pressing Play schedules every pulse into the future in one go.
+
+Because the generator is seeded, **a whole night sky costs about 370 bytes** —
+the seed, how many stars it made, and which of them you connected. Keeping a
+constellation stores that; reopening it replays the generator and every field
+star lands back where it was. The star count is saved with the entry rather than
+recomputed, so a sky kept on a phone reopens intact on a tablet.
+
+Entries are validated on load: an index pointing past the end of its sky would
+crash the renderer, so incoherent entries are dropped rather than trusted.
+
+## Layers
+
+Press Play and the constellation **loops** rather than playing once. Draw while
+it is looping and you start a **new line** over the top — up to three — each in
+its own colour, each looping on **its own cycle**. Lines of different lengths
+drift against each other instead of marching in step, so two constellations
+become one piece of music rather than two takes of the same one. Everything is
+pentatonic, so drifting lines can't collide into a wrong note.
+
+There is no button for adding a layer. Drawing over something that is already
+playing is the gesture, once per take: the first star you touch opens the line,
+the rest extend it. Stop and play again to start another.
+
+Undo works while the loop runs — it takes the last star off the line you are
+drawing, and an empty line disappears, handing you back the one below.
+
+## Shape is melody, and shape is also rhythm
+
+A constellation's pitches come from how high its stars sit. Its **rhythm** comes
+from how far apart they are: the gap before each note grows with the reach from
+the last star, clamped so nothing drags. Orion's belt — three stars almost on top
+of one another — tumbles out roughly three times faster than the long stretch
+down from his shoulder. Two constellations with the same notes in the same order
+still sound like different pieces of music.
+
+Each night is also tuned by its own seed, drawn from six pentatonic scales. They
+all share a root and a fifth on purpose, so a new sky sounds like a new mood
+rather than a different instrument. The current one is printed under the wordmark
+like a key signature.
+
+## Real constellations
+
+Eight of them, in `Atlas.swift`, stored as J2000 catalogue coordinates for their
+named stars and projected onto the sky with a gnomonic (tangent-plane) projection
+about each figure's own centre — the same construction a star chart uses for a
+small patch of sky, so straight lines stay straight and the shape you know stays
+the shape you know. East is drawn to the left, as it is when you look up.
+Magnitudes are approximate and only set how large a star is drawn.
+
+Starsong draws one continuous line, so each figure is stored as a *walk*: the
+order to visit its stars, doubling back through a junction where the traditional
+figure branches. A repeated star is a repeated note, which is a perfectly good
+thing for a melody to do.
+
+Picking one lays it over a fresh field of invented stars, already drawn, so you
+can play it, keep it, or add to it. `AtlasTests` renders every figure to a
+contact sheet — a wrong coordinate is obvious in a picture and invisible in a
+number — and asserts that Orion's belt is still collinear after projection.
+
+## Playing it without seeing it
+
+The sky is a `Canvas`, which is a single opaque rectangle as far as VoiceOver is
+concerned. Exposing seventy stars as seventy elements would pass an audit and be
+useless — nobody swipes through seventy dots to find a note.
+
+Instead the sky is **one adjustable element**. Swiping up and down walks the
+stars **in pitch order, lowest to highest**, sounding each one as it arrives, so
+the sky can be scanned by ear; double tap adds the current star to the line. The
+ordering is the part that matters: swiping up moves up the sky *and* up the
+scale, so the gesture and the instrument agree.
+
+The same three moves are also named actions in the Actions rotor — "Next star,
+higher", "Previous star, lower", "Add this star" — because the adjustable gesture
+is only useful if you think to try it, and a named action can be found by
+reading. Adding a star posts an announcement naming the note, since focus stays
+on the sky and a value nobody is listening to would go unheard.
+
+Where the navigation is sitting is **drawn**, as a dashed ring. That is for
+someone with low vision or using Switch Control, and it is also how the feature
+gets tested.
+
+Reduce Motion holds the sky still — no twinkle, no shooting stars. Pulses stay:
+they are brief feedback for something you just did, not ambient movement.
+
+**What is and isn't verified.** `StarNavigationTests` covers the ordering, the
+cursor, the announcements, and the note names; `CursorRenderingTests` renders the
+ring and the still sky and compares them. The UI tests confirm the sky is present
+in the accessibility tree, labelled, and says how to begin, and that every
+control is named. Reduce Motion is verified end to end on a simulator: with it
+on, two screenshots seconds apart are byte-identical; with it off, they differ.
+
+**The adjustable gesture has never been driven under VoiceOver, and it cannot be
+here.** XCUITest reads the accessibility *tree* but cannot invoke accessibility
+*actions* — `tap()` sends a real touch, and only VoiceOver turns a double tap
+into an activation; `adjust` drives real sliders only. And VoiceOver is not
+present in the iOS Simulator at all — Settings → Accessibility has no VoiceOver
+row, so it cannot be switched on there by any means.
+
+Verifying it needs a physical device:
+
+1. Settings → Accessibility → VoiceOver, on. (Set the Accessibility Shortcut
+   first, so a triple-click of the side button gets you back out.)
+2. Open Starsong and single-tap the sky. It should say "Night sky", then the
+   number of stars and how to begin.
+3. Swipe up and down with one finger. Each swipe should move a note up or down
+   the scale, sound it, and say its name and where it is.
+4. Double tap. It should say which note you added and how many stars are on the
+   line, and the dashed ring should be sitting on that star.
+5. Swipe up with three fingers, or use the Actions rotor, to find "Next star,
+   higher", "Previous star, lower", and "Add this star".
+
+## What changed from the browser version
+
+- `Canvas` + `TimelineView` replaces `<canvas>` + `requestAnimationFrame`.
+- `AVAudioEngine` generates the same triangle+sine ping in-process; no Web Audio.
+- Haptic tick on each star via `.sensoryFeedback`.
+- Dragging draws a constellation in one stroke, not just tap-by-tap.
+- Constellations can be kept, reopened, and shared as a star card.
+- Rhythm comes from the spacing of the stars; each night has its own tuning.
+- Eight real constellations can be picked from a list and played.
+- The sky can be scanned by ear and drawn on without seeing it.
+- Constellations loop, and up to three can play at once.

@@ -1,0 +1,6 @@
+// Shared build settings.
+//
+// Secrets.xcconfig is git-ignored and holds your Anthropic API key. Create it
+// from Secrets.example.xcconfig. If it's missing, the build still succeeds and
+// "Name it" falls back to a local story.
+#include? "Secrets.xcconfig"

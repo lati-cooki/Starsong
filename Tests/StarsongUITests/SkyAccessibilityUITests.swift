@@ -1,0 +1,109 @@
+import XCTest
+
+/// Model tests prove the navigation logic works. These prove the accessibility
+/// tree actually carries it — that the canvas really is one labelled element
+/// with a spoken value, and not a silent rectangle with good intentions.
+final class SkyAccessibilityUITests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+    }
+
+    func launch() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launch()
+        return app
+    }
+
+    func testTheSkyIsOneLabelledElementThatSaysWhereYouAre() {
+        let app = launch()
+        let sky = app.descendants(matching: .any)["Night sky"]
+        XCTAssertTrue(sky.waitForExistence(timeout: 20), "the sky is not in the accessibility tree")
+
+        let spoken = try? XCTUnwrap(sky.value as? String)
+        XCTAssertTrue(spoken?.contains("Swipe up") ?? false,
+                      "an untouched sky should say how to start; got \(spoken ?? "nothing")")
+    }
+
+    func testEveryControlIsReachableAndNamed() {
+        let app = launch()
+        for name in ["Undo", "New sky", "Play", "Name it", "Real constellations"] {
+            XCTAssertTrue(app.buttons[name].waitForExistence(timeout: 10),
+                          "\(name) is missing from the accessibility tree")
+        }
+    }
+
+    /// The atlas is the one part of the app that is fully usable without sight
+    /// today: a named list, each row with a button that plays it.
+    func testTheAtlasIsNavigableAndEveryRowCanBeHeard() {
+        let app = launch()
+        app.buttons["Real constellations"].tap()
+
+        XCTAssertTrue(app.navigationBars["Real constellations"].waitForExistence(timeout: 10))
+        for name in ["Orion", "Cassiopeia", "Cygnus"] {
+            XCTAssertTrue(app.descendants(matching: .any)[name].firstMatch.exists,
+                          "\(name) is not reachable")
+        }
+        XCTAssertGreaterThan(app.buttons["Hear it"].firstMatch.exists ? 1 : 0, 0,
+                             "a row cannot be played")
+
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["New sky"].waitForExistence(timeout: 10))
+    }
+
+    /// Placing a figure should leave the sky drawn and playable.
+    func testPlacingAConstellationFromTheAtlasDrawsIt() {
+        let app = launch()
+        app.buttons["Real constellations"].tap()
+        app.descendants(matching: .any)["Orion"].firstMatch.tap()
+
+        XCTAssertTrue(app.staticTexts["Orion"].waitForExistence(timeout: 10),
+                      "the placed figure should name itself")
+        XCTAssertTrue(app.buttons["Play"].isEnabled, "a placed figure should be playable")
+    }
+}
+
+extension SkyAccessibilityUITests {
+    /// What XCUITest can and cannot reach, written down so the next person does
+    /// not repeat the experiment: it reads the accessibility *tree* (labels,
+    /// values, hints) but cannot invoke accessibility *actions*. `tap()` sends a
+    /// real touch, and only VoiceOver turns a double tap into an activation;
+    /// `adjust` drives real sliders only, and the sky reports as a Button
+    /// because the activate action wins the element-type mapping.
+    ///
+    /// So the adjustable gesture and the named actions are NOT verified here.
+    /// `StarNavigationTests` covers every bit of logic behind them; this covers
+    /// that the sky is present, labelled, and says how to begin.
+    func testTheSkySaysHowToPlayItWithoutSight() {
+        let app = launch()
+        let sky = app.descendants(matching: .any)["Night sky"]
+        XCTAssertTrue(sky.waitForExistence(timeout: 20))
+
+        let resting = sky.value as? String
+        XCTAssertTrue(resting?.contains("Swipe up") ?? false,
+                      "the resting value should say how to begin; got \(resting ?? "nothing")")
+        XCTAssertTrue(resting?.contains("stars") ?? false,
+                      "it should say how much sky there is; got \(resting ?? "nothing")")
+    }
+
+    /// The sighted path, end to end through the real UI: sweeping across the
+    /// sky draws a constellation and wakes the controls up.
+    func testSweepingAcrossTheSkyDrawsAConstellation() {
+        let app = launch()
+        let sky = app.descendants(matching: .any)["Night sky"]
+        XCTAssertTrue(sky.waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["Play"].isEnabled, "nothing is drawn yet")
+
+        // A few sweeps at different heights, so this does not depend on where
+        // one particular random sky happened to put its stars.
+        for height in [0.35, 0.5, 0.65] {
+            sky.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: height))
+                .press(forDuration: 0.05,
+                       thenDragTo: sky.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: height + 0.05)))
+            if app.buttons["Play"].isEnabled { break }
+        }
+
+        XCTAssertTrue(app.buttons["Play"].isEnabled, "sweeping the sky drew nothing")
+        XCTAssertTrue(app.buttons["Keep this one"].exists, "a drawn constellation should be keepable")
+    }
+}

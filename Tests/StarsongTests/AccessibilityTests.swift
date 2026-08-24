@@ -179,26 +179,71 @@ final class CursorRenderingTests: XCTestCase {
     }
 
     /// Reduce Motion should hold the sky still rather than merely slowing it.
+    ///
+    /// Compared with a tolerance, not for equality. `drawNight` fills a gradient
+    /// that rasterises with a slightly different dither each time — neighbouring
+    /// channels come back one or two apart on renders of provably identical
+    /// content, since that layer takes no time parameter at all. Exact equality
+    /// on either the PNG bytes or the pixels therefore fails at random under a
+    /// full-suite run. A twinkling star moves a channel far further than dither
+    /// does, so peak difference separates the two cleanly.
     func testReduceMotionFreezesTheTwinkle() throws {
         let model = SkyModel()
         model.newSky(for: CGSize(width: 390, height: 844), seed: 9)
 
-        func render(still: Bool, birth: Date) throws -> Data {
+        func render(still: Bool, birth: Date) throws -> [UInt8] {
             let canvas = SkyCanvas(stars: model.stars, constellations: [], pulses: [],
                                    shooters: [], birth: birth, cursor: nil, isStill: still)
                 .frame(width: 200, height: 400)
             let renderer = ImageRenderer(content: canvas)
             renderer.isOpaque = true
-            return try XCTUnwrap(renderer.uiImage?.pngData())
+            renderer.scale = 1          // Pinned: the device scale is not the subject.
+            return try Self.pixels(of: try XCTUnwrap(renderer.cgImage))
         }
 
         // Two different points in the twinkle cycle.
         let early = Date()
         let late = early.addingTimeInterval(-0.8)
-        XCTAssertEqual(try render(still: true, birth: early), try render(still: true, birth: late),
-                       "the sky moved with Reduce Motion on")
-        XCTAssertNotEqual(try render(still: false, birth: early), try render(still: false, birth: late),
-                          "the sky should twinkle when Reduce Motion is off")
+
+        let frozen = Self.peakDifference(try render(still: true, birth: early),
+                                         try render(still: true, birth: late))
+        XCTAssertLessThanOrEqual(frozen, Self.ditherTolerance,
+                                 "the sky moved with Reduce Motion on (peak channel change \(frozen))")
+
+        let moving = Self.peakDifference(try render(still: false, birth: early),
+                                         try render(still: false, birth: late))
+        XCTAssertGreaterThan(moving, Self.ditherTolerance,
+                             "the sky should twinkle when Reduce Motion is off (peak change only \(moving))")
+    }
+
+    /// Room for gradient dither, and nowhere near enough for a moving star.
+    static let ditherTolerance = 8
+
+    /// The largest single-channel change between two renders of the same size.
+    static func peakDifference(_ a: [UInt8], _ b: [UInt8]) -> Int {
+        guard a.count == b.count else { return .max }
+        return zip(a, b).reduce(0) { peak, pair in
+            max(peak, abs(Int(pair.0) - Int(pair.1)))
+        }
+    }
+
+    /// Raw premultiplied RGBA, drawn into a context we control so the comparison
+    /// does not depend on whatever backing format the renderer happened to pick.
+    static func pixels(of image: CGImage) throws -> [UInt8] {
+        let width = image.width
+        let height = image.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &bytes,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return bytes
     }
 
     @MainActor

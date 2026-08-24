@@ -2,10 +2,13 @@ import Foundation
 
 /// Asks Claude to name the constellation you just drew and tell its story.
 ///
-/// The key is read from `ANTHROPIC_API_KEY` in Info.plist, which is fed by
-/// `Config/Secrets.xcconfig` (see the README). That is fine for a toy on your
-/// own device — anything you ship should call your own server instead, so the
-/// key never leaves it.
+/// The key is whatever the person brought: `KeyStore` first, falling back to
+/// `ANTHROPIC_API_KEY` in Info.plist (fed by `Config/Secrets.xcconfig`) so a
+/// checkout with a key in it still works without touching the Keychain.
+///
+/// Either way the key is on the device and the device talks to the API
+/// directly, which is fine for something you run yourself. Anything you ship
+/// to other people should call your own server instead, so no key travels.
 enum Namer {
     struct Myth: Decodable, Equatable {
         let name: String
@@ -36,7 +39,21 @@ enum Namer {
 
     static var isConfigured: Bool { apiKey != nil }
 
-    private static var apiKey: String? {
+    /// Where the key in use came from, so the profile can say so.
+    enum Source: Equatable {
+        case keychain, bundle, none
+    }
+
+    static var source: Source {
+        if KeyStore.hasKey { return .keychain }
+        return bundleKey != nil ? .bundle : .none
+    }
+
+    /// A key the person brought wins over one baked in at build time — they
+    /// chose it more recently, and it is the one they can change.
+    static var apiKey: String? { KeyStore.load() ?? bundleKey }
+
+    private static var bundleKey: String? {
         let key = (Bundle.main.object(forInfoDictionaryKey: "ANTHROPIC_API_KEY") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let key, !key.isEmpty else { return nil }
@@ -44,16 +61,56 @@ enum Namer {
     }
 
     /// Never throws: a sky that can't reach the network still gets a name.
+    /// The reason is logged rather than dropped — every failure used to arrive
+    /// as the same wordless fallback, which made a missing key and a rejected
+    /// key indistinguishable.
     static func myth(for lines: [[Star]], voices: [Instrument] = []) async -> Myth {
         do {
             return try await requestMyth(for: lines, voices: voices)
         } catch {
+            print("Starsong: naming failed — \(describe(error))")
             return unnamed
         }
     }
 
-    static func requestMyth(for lines: [[Star]], voices: [Instrument] = []) async throws -> Myth {
-        guard let apiKey else { throw Failure.missingKey }
+    /// Plain English for a failure, for logs and for the profile.
+    static func describe(_ error: Error) -> String {
+        switch error {
+        case Failure.missingKey:
+            return "no API key. Add one in Profile."
+        case Failure.http(401), Failure.http(403):
+            return "the key was rejected (HTTP 401). Check it in Profile."
+        case Failure.http(429):
+            return "rate limited (HTTP 429). Try again shortly."
+        case let Failure.http(status) where status >= 500:
+            return "the API is having trouble (HTTP \(status)). Try again shortly."
+        case let Failure.http(status):
+            return "the request was refused (HTTP \(status))."
+        case let Failure.refused(why):
+            return why
+        case Failure.malformedResponse:
+            return "the reply could not be read."
+        default:
+            return error.localizedDescription
+        }
+    }
+
+    /// Checks a key by asking for a real (tiny) myth with it. Deliberately the
+    /// same request shape the app actually sends, so this also catches a body
+    /// the API has stopped accepting — not just a bad key.
+    static func verify(_ key: String) async -> Result<Myth, Error> {
+        let probe = [Star(x: 0.3, y: 0.6, radius: 1, phase: 0, isBright: false),
+                     Star(x: 0.7, y: 0.35, radius: 1, phase: 0, isBright: false)]
+        do {
+            return .success(try await requestMyth(for: [probe], key: key))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    static func requestMyth(for lines: [[Star]], voices: [Instrument] = [],
+                            key: String? = nil) async throws -> Myth {
+        guard let apiKey = key ?? apiKey else { throw Failure.missingKey }
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"

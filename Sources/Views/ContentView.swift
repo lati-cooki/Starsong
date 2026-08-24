@@ -10,7 +10,7 @@ struct ContentView: View {
     @State private var sheet: Sheet?
 
     enum Sheet: String, Identifiable {
-        case voices, atlas, log
+        case voices, atlas, log, profile
         var id: String { rawValue }
     }
     @State private var skySize: CGSize = .zero
@@ -55,6 +55,8 @@ struct ContentView: View {
                 AtlasView { figure in model.place(figure, for: skySize) }
             case .log:
                 SkyLogView(log: log) { sky in model.restore(sky) }
+            case .profile:
+                ProfileView()
             }
         }
     }
@@ -125,6 +127,7 @@ struct ContentView: View {
             Spacer()
             voicesButton
             atlasButton
+            profileButton
             if !log.isEmpty { logButton }
         }
         .padding(.top, 60)
@@ -158,6 +161,23 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Real constellations")
+    }
+
+    /// Dimmed until a key is present, so "Name it" not inventing anything is
+    /// visible up here rather than only discoverable by pressing it.
+    private var profileButton: some View {
+        Button { sheet = .profile } label: {
+            Image(systemName: Namer.isConfigured ? "person.crop.circle.fill" : "person.crop.circle.badge.plus")
+                .font(.system(size: 14))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.08), in: Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.18)))
+                .foregroundStyle(Namer.isConfigured ? Palette.aqua : Palette.ink.opacity(0.45))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Profile")
+        .accessibilityValue(Namer.isConfigured ? "Key installed" : "No key. Naming is offline.")
     }
 
     /// Only appears once there's something to look back at.

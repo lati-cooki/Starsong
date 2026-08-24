@@ -35,7 +35,16 @@ one, since that is the usual way these workflows rot.
 ## Naming constellations
 
 "Name it" calls the Claude API. Without a key the app still works — it falls
-back to a local story — so this step is optional.
+back to a local story — so this step is optional. The person button in the title
+bar shows at a glance whether a key is installed.
+
+**Bring your own key.** Open Profile and paste one. It is checked before it is
+stored, by asking for one short myth, so a key that will not work says so
+immediately instead of turning into a silent fallback later. It is kept in the
+device Keychain (`whenUnlockedThisDeviceOnly`), never written to the sky log or
+a shared constellation, and can be removed from the same screen.
+
+**Or build one in**, which is handy for a checkout you keep going back to:
 
 ```bash
 cp Config/Secrets.example.xcconfig Config/Secrets.xcconfig
@@ -45,9 +54,14 @@ Put your key in that file (`ANTHROPIC_API_KEY = sk-ant-...`); it is git-ignored
 and feeds `Info.plist` through the xcconfig. Don't quote the value or add a
 trailing comment — xcconfig treats `//` as the start of a comment.
 
-That is fine for a toy on your own device. **Anything you ship should call your
-own server instead**, so the key never leaves it: an app binary is not a secret,
-and a key inside one can be extracted.
+A key entered in Profile wins over one built in — it was chosen more recently
+and it is the one you can change without rebuilding. Removing it falls back to
+the built-in key, if there is one.
+
+Either way the key sits on the device and the device talks to the API directly.
+That is fine for something you run yourself. **Anything you ship to other people
+should call your own server instead**, so no key travels: an app binary is not a
+secret, and a key inside one can be extracted.
 
 The request uses Claude Opus 5 with [structured
 outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs),

@@ -14,6 +14,8 @@ struct ContentView: View {
         var id: String { rawValue }
     }
     @State private var skySize: CGSize = .zero
+    /// Raised when "Name it" would replace a name that was settled on purpose.
+    @State private var askBeforeRenaming = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let birth = Date()
 
@@ -44,6 +46,14 @@ struct ContentView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: model.connections)
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: model.notePulse)
         .sensoryFeedback(.success, trigger: model.myth?.name)
+        .confirmationDialog("Replace \(model.myth?.name ?? "this name")?",
+                            isPresented: $askBeforeRenaming,
+                            titleVisibility: .visible) {
+            Button("Ask for a new name") { model.nameIt() }
+            Button("Keep this name", role: .cancel) { }
+        } message: {
+            Text("Claude will suggest a different name and story for this constellation.")
+        }
         .sheet(item: $sheet) { which in
             switch which {
             case .voices:
@@ -101,9 +111,16 @@ struct ContentView: View {
             tuningCaption
             if model.path.isEmpty { hint }
             Spacer(minLength: 12)
+            // The card is also the only place to type a name, so it appears as
+            // soon as there is a constellation to name — otherwise a sky with no
+            // key and no suggestion offers nowhere to write one.
             if let myth = model.myth {
-                MythCard(myth: myth)
+                MythCard(myth: myth) { model.rename($0) }
                     .id(myth.name)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            } else if model.path.count >= 2 {
+                MythCard(myth: Namer.Myth(name: "", myth: "")) { model.rename($0) }
+                    .id("unnamed")
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
             keepButton
@@ -267,7 +284,10 @@ struct ContentView: View {
                 model.isPlaying ? model.stop() : model.play()
             }
             .disabled(!model.canPlay && !model.isPlaying)
-            PillButton(model.isNaming ? "Listening…" : "Name it") { model.nameIt() }
+            PillButton(model.isNaming ? "Listening…" : "Name it") {
+                // Only asks when there is a decision to lose.
+                if model.nameIsMine { askBeforeRenaming = true } else { model.nameIt() }
+            }
                 .disabled(!model.canName)
         }
         .padding(.bottom, 36)
@@ -304,23 +324,73 @@ struct PillButton: View {
     }
 }
 
+/// The name and its story. The name is editable in place — tap it and type.
+///
+/// `@State` seeded from the myth is safe because the caller keys this view on
+/// the name, so a name arriving from anywhere else rebuilds the card with the
+/// new text rather than leaving a stale draft behind.
 struct MythCard: View {
     let myth: Namer.Myth
+    let onRename: (String) -> Void
+
+    @State private var draft: String
+    @FocusState private var editing: Bool
+
+    init(myth: Namer.Myth, onRename: @escaping (String) -> Void) {
+        self.myth = myth
+        self.onRename = onRename
+        _draft = State(initialValue: myth.name)
+    }
 
     var body: some View {
         VStack(spacing: 6) {
-            Text(myth.name)
-                .font(.system(size: 26, weight: .semibold, design: .serif))
-                .foregroundStyle(Palette.gold)
-                .multilineTextAlignment(.center)
-            Text(myth.myth)
-                .font(.system(size: 15))
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.center)
-                .opacity(0.9)
+            name
+            if !myth.myth.isEmpty {
+                Text(myth.myth)
+                    .font(.system(size: 15))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.center)
+                    .opacity(0.9)
+            }
         }
         .padding(.horizontal, 28)
         .padding(.bottom, 16)
+    }
+
+    /// A field styled to read as the heading it replaces, so the card looks the
+    /// same until you touch it. The underline only appears while editing —
+    /// a permanent one would make every constellation look like a form.
+    private var name: some View {
+        TextField("Name this constellation", text: $draft)
+            .font(.system(size: 26, weight: .semibold, design: .serif))
+            .foregroundStyle(Palette.gold)
+            .multilineTextAlignment(.center)
+            .textInputAutocapitalization(.words)
+            .submitLabel(.done)
+            .focused($editing)
+            .onSubmit { commit() }
+            // Tapping elsewhere is as much a commit as pressing Done; losing a
+            // typed name to a stray tap would be the worst outcome here.
+            .onChange(of: editing) { wasEditing, nowEditing in
+                if wasEditing && !nowEditing { commit() }
+            }
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Palette.gold.opacity(editing ? 0.5 : 0))
+                    .frame(height: 1)
+                    .offset(y: 4)
+            }
+            .animation(.easeOut(duration: 0.2), value: editing)
+            .accessibilityLabel("Constellation name")
+            .accessibilityValue(draft.isEmpty ? "Not named yet" : draft)
+            .accessibilityHint("Type a name for this constellation.")
+    }
+
+    private func commit() {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = trimmed
+        guard trimmed != myth.name else { return }
+        onRename(trimmed)
     }
 }
 

@@ -57,8 +57,14 @@ final class SkyAccessibilityUITests: XCTestCase {
         app.buttons["Real constellations"].tap()
         app.descendants(matching: .any)["Orion"].firstMatch.tap()
 
-        XCTAssertTrue(app.staticTexts["Orion"].waitForExistence(timeout: 10),
-                      "the placed figure should name itself")
+        // The name is an editable field now, not a heading, so it is reachable
+        // as a text field whose *value* is the name — the label belongs to the
+        // control ("Constellation name") rather than to this constellation.
+        let name = app.textFields["Constellation name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 10),
+                      "the placed figure should offer its name for editing")
+        XCTAssertEqual(name.value as? String, "Orion",
+                       "the placed figure should name itself")
         XCTAssertTrue(app.buttons["Play"].isEnabled, "a placed figure should be playable")
     }
 }

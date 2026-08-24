@@ -69,6 +69,10 @@ final class SkyModel {
     private(set) var shooters: [Shooter] = []
 
     private(set) var myth: Namer.Myth?
+    /// Set when the name on screen was settled deliberately — typed by hand, or
+    /// carried in from a sky that was kept — rather than being the last thing
+    /// Claude happened to say. Asking Claude again offers to leave it alone.
+    private(set) var nameIsMine = false
     private(set) var isNaming = false
     private(set) var isPlaying = false
     /// Bumped on every new connection; drives the haptic tick.
@@ -122,6 +126,7 @@ final class SkyModel {
         isNaming = false
         pulses = []
         myth = nil
+        nameIsMine = false
 
         keptID = nil
         // A new sky keeps the voice you were last playing in.
@@ -195,6 +200,32 @@ final class SkyModel {
         return true
     }
 
+    // MARK: - Naming it yourself
+
+    /// Names the constellation by hand.
+    ///
+    /// Keeps whatever story is already there: renaming a myth Claude told
+    /// should not throw the myth away, and a name typed with no story at all is
+    /// still a perfectly good thing to keep — `SavedSky.isCoherent` asks for a
+    /// name, not a story.
+    ///
+    /// `keptID` deliberately survives, so renaming something already in the log
+    /// updates that entry in place instead of orphaning it.
+    func rename(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != (myth?.name ?? "") else { return }
+
+        guard !trimmed.isEmpty else {
+            // Clearing the name hands the constellation back to Claude, or to
+            // the offline fallback if there is no key.
+            myth = nil
+            nameIsMine = false
+            return
+        }
+        myth = Namer.Myth(name: trimmed, myth: myth?.myth ?? "")
+        nameIsMine = true
+    }
+
     /// Adds whatever the cursor is sitting on.
     @discardableResult
     func connectCursor() -> Bool {
@@ -216,7 +247,10 @@ final class SkyModel {
         makeSky(seed: seed ?? UInt64.random(in: .min ... .max), count: field, figure: figure)
         lines = [Line(stars: figure.walk.map { field + $0 }, instrument: instrument)]
         activeLine = 0
+        // A real constellation arrives with the name it has had for millennia,
+        // which is worth protecting from an accidental "Name it".
         myth = Namer.Myth(name: figure.name, myth: figure.note)
+        nameIsMine = true
         connections += 1
     }
 
@@ -252,7 +286,11 @@ final class SkyModel {
         lines = sky.savedLines
         activeLine = max(lines.count - 1, 0)
         for index in connectedStars where stars.indices.contains(index) { stars[index].isLit = true }
+        // Whether this name was typed or suggested isn't recorded in the file,
+        // so treat anything kept as settled. Asking before replacing it is the
+        // cheap mistake; overwriting a name someone chose is the expensive one.
         myth = Namer.Myth(name: sky.name, myth: sky.myth)
+        nameIsMine = true
         keptID = sky.id
         connections += 1
     }
@@ -318,6 +356,7 @@ final class SkyModel {
         path.append(index)
         connections += 1
         myth = nil
+        nameIsMine = false
         keptID = nil
 
         let star = stars[index]
@@ -354,6 +393,7 @@ final class SkyModel {
             stars[removed].isLit = false
         }
         myth = nil
+        nameIsMine = false
         keptID = nil
     }
 
@@ -458,6 +498,8 @@ final class SkyModel {
             let result = await Namer.myth(for: drawn, voices: voices)
             guard !Task.isCancelled else { return }
             self?.myth = result
+            // Claude's suggestion, not a decision — replacing it needs no warning.
+            self?.nameIsMine = false
             self?.isNaming = false
         }
     }

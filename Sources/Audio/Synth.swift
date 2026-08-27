@@ -26,10 +26,14 @@ final class Synth {
     private let sessionQueue = DispatchQueue(label: "com.starsong.synth.session")
 
     /// A whole cycle is scheduled at once, so each line claims one voice per
-    /// note immediately. Three ten-note lines is thirty before anything has
-    /// sounded, and a wrapped round-robin would `stop()` a note still waiting
-    /// to play. Sized for the worst case with room to ring.
-    private static let voiceCount = 48
+    /// note immediately, and a wrapped round-robin would `stop()` a note still
+    /// waiting to play. Sized for the worst case with room to ring.
+    ///
+    /// The worst case used to be three ten-note lines — thirty before anything
+    /// had sounded — and 48 covered it. The keepsake's fifty years are one line
+    /// of fifty notes, which does not fit: the round-robin wrapped and the first
+    /// two years were stopped mid-ring before they had properly begun.
+    private static let voiceCount = 64
     /// Bounded by bytes rather than by entries. A 2.4-second note is about
     /// 400 kB, a short one a tenth of that, so counting entries makes the real
     /// ceiling swing by an order of magnitude — and five voices multiply

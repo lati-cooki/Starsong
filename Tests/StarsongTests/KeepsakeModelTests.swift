@@ -122,6 +122,31 @@ final class KeepsakeModelTests: XCTestCase {
         XCTAssertFalse(model.isPlaying)
     }
 
+    /// A whole life goes onto the audio clock in one go, so stopping has to
+    /// reach what was already queued rather than only the task that queued it.
+    /// The rings are the visible half of that: any still in the future are
+    /// dropped, or the sky keeps pulsing through a life that is not playing.
+    func testStoppingDropsTheRingsThatHadNotHappenedYet() {
+        let model = makeModel()
+        model.play()
+        XCTAssertEqual(model.pulses.count, model.life.count)
+
+        model.stop()
+        let now = Date()
+        XCTAssertTrue(model.pulses.allSatisfy { $0.start <= now },
+                      "a ring was left queued for a life that has stopped")
+        XCTAssertLessThan(model.pulses.count, model.life.count)
+    }
+
+    /// Opening one year after another should let the first ring out rather than
+    /// being cut off, so silencing is reserved for stopping playback.
+    func testTouchingTwoYearsInARowLetsBothRing() {
+        let model = makeModel()
+        model.show(2)
+        model.show(5)
+        XCTAssertEqual(model.pulses.count, 2)
+    }
+
     func testTouchingAYearStopsPlayback() {
         let model = makeModel()
         model.play()

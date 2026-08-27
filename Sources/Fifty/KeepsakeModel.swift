@@ -166,7 +166,13 @@ final class KeepsakeModel {
     func stop() {
         playback?.cancel()
         playback = nil
+        guard isPlaying else { return }
         isPlaying = false
+        // The rings were queued with the notes, so the ones still to come have
+        // to go the same way the sound does — otherwise the sky keeps pulsing
+        // through a life that is no longer playing.
+        Synth.shared.silence()
+        pulses.removeAll { $0.start > .now }
     }
 
     // MARK: - Housekeeping

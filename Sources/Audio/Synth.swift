@@ -103,6 +103,19 @@ final class Synth {
         }
     }
 
+    /// Stops every voice at once.
+    ///
+    /// Nothing else needs this: Starsong schedules one cycle at a time, so
+    /// cancelling the loop lets the cycle in flight ring out, which is a
+    /// pleasant way to stop. The keepsake puts a whole fifty-note life onto the
+    /// audio clock in one go, and there cancelling the task that queued it
+    /// leaves fifteen seconds of music playing behind a button that says Stop.
+    func silence() {
+        sessionQueue.async { [self] in
+            for voice in voices where voice.isPlaying { voice.stop() }
+        }
+    }
+
     private func checkoutVoice() -> AVAudioPlayerNode {
         lock.lock()
         defer { lock.unlock() }

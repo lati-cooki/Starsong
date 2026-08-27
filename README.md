@@ -99,7 +99,7 @@ swift Tools/make-icon.swift
 | `Sources/Fifty/KeepsakeModel.swift` | Which year is showing, what has been read, and playback |
 | `Sources/Views/SkyCanvas.swift` | Drawing. A pure function of the state above plus the current time |
 | `Sources/Views/SkyLogView.swift` | The kept skies, with share and delete |
-| `Tests/StarsongTests` | 187 tests over the tunings, the rhythm, the haptics, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, the Claude response parsing, and the keepsake |
+| `Tests/StarsongTests` | 189 tests over the tunings, the rhythm, the haptics, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, the Claude response parsing, and the keepsake |
 | `Tests/StarsongUITests` | 10 tests over the accessibility tree, the drawing gesture, and the keepsake, through the real UI |
 
 Effects are **time-parametric**: a shooting star knows where it started, how

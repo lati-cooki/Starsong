@@ -100,7 +100,7 @@ swift Tools/make-icon.swift
 | `Sources/Views/SkyCanvas.swift` | Drawing. A pure function of the state above plus the current time |
 | `Sources/Views/SkyLogView.swift` | The kept skies, with share and delete |
 | `Tests/StarsongTests` | 187 tests over the tunings, the rhythm, the haptics, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, the Claude response parsing, and the keepsake |
-| `Tests/StarsongUITests` | 9 tests over the accessibility tree and the drawing gesture, through the real UI |
+| `Tests/StarsongUITests` | 10 tests over the accessibility tree, the drawing gesture, and the keepsake, through the real UI |
 
 Effects are **time-parametric**: a shooting star knows where it started, how
 fast it moves, and when it was born, so its position is a function of the clock

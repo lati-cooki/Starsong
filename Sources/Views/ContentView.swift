@@ -158,19 +158,19 @@ struct ContentView: View {
         .padding(.horizontal, 22)
     }
 
-    /// Hers. Named rather than iconographic, because "gift" on its own is a
-    /// guess and her name is not.
+    /// Hers. Her name reads better than a gift box, but it does not fit: five
+    /// pills and the wordmark already fill the title bar on a small phone, and
+    /// a spelled-out name pushed it over. The name is on the label instead,
+    /// where VoiceOver reads it.
     private var keepsakeButton: some View {
         Button { showingKeepsake = true } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "gift").font(.system(size: 12))
-                Text(Keepsake.name).font(.system(size: 13, weight: .medium))
-            }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .background(Color.white.opacity(0.08), in: Capsule())
-            .overlay(Capsule().stroke(Color.white.opacity(0.18)))
-            .foregroundStyle(Palette.rose)
+            Image(systemName: "gift")
+                .font(.system(size: 14))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.08), in: Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.18)))
+                .foregroundStyle(Palette.rose)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(Keepsake.name)'s fifty")

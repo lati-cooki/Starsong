@@ -14,6 +14,9 @@ struct ContentView: View {
         var id: String { rawValue }
     }
     @State private var skySize: CGSize = .zero
+    /// The keepsake is a whole screen of its own rather than a sheet — it is
+    /// not a panel of this app, it is a different one wearing the same sky.
+    @State private var showingKeepsake = false
     /// Raised when "Name it" would replace a name that was settled on purpose.
     @State private var askBeforeRenaming = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -53,6 +56,9 @@ struct ContentView: View {
             Button("Keep this name", role: .cancel) { }
         } message: {
             Text("Claude will suggest a different name and story for this constellation.")
+        }
+        .fullScreenCover(isPresented: $showingKeepsake) {
+            KeepsakeView { showingKeepsake = false }
         }
         .sheet(item: $sheet) { which in
             switch which {
@@ -142,6 +148,7 @@ struct ContentView: View {
                 .font(.system(size: 32, design: .serif))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
+            keepsakeButton
             voicesButton
             atlasButton
             profileButton
@@ -149,6 +156,25 @@ struct ContentView: View {
         }
         .padding(.top, 60)
         .padding(.horizontal, 22)
+    }
+
+    /// Hers. Named rather than iconographic, because "gift" on its own is a
+    /// guess and her name is not.
+    private var keepsakeButton: some View {
+        Button { showingKeepsake = true } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "gift").font(.system(size: 12))
+                Text(Keepsake.name).font(.system(size: 13, weight: .medium))
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(Color.white.opacity(0.08), in: Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.18)))
+            .foregroundStyle(Palette.rose)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(Keepsake.name)'s fifty")
+        .accessibilityHint("Opens her keepsake: fifty stars, one for every year.")
     }
 
     private var voicesButton: some View {

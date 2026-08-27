@@ -8,6 +8,10 @@ Claude will name the figure you drew and tell its story. Keep the ones you like;
 the sky they were drawn on comes back with them. Or pick a real constellation and
 hear what Orion sounds like.
 
+It also holds a keepsake: **Fifty**, a birthday present built out of the same
+sky — fifty stars wound into a spiral, one for every year of a life, tuned to a
+key her own name picks. See below.
+
 Native SwiftUI. iOS 17+, iPhone and iPad.
 
 ## Build and run
@@ -89,9 +93,13 @@ swift Tools/make-icon.swift
 | `Sources/Audio/Instrument.swift` | The five voices. Every waveform is synthesised — there are no samples |
 | `Sources/Audio/Synth.swift` | `AVAudioEngine`, the pool of players, and the cache of rendered notes |
 | `Sources/Naming/Namer.swift` | The Claude call |
+| `Sources/Fifty/Keepsake.swift` | **The only file with anything personal in it**: a name, a birth year, two messages, fifty lines |
+| `Sources/Fifty/NameSong.swift` | A name, turned into a melody — and into the key the keepsake is played in |
+| `Sources/Fifty/FiftySky.swift` | The spiral: where each year sits, and what that does to the tune |
+| `Sources/Fifty/KeepsakeModel.swift` | Which year is showing, what has been read, and playback |
 | `Sources/Views/SkyCanvas.swift` | Drawing. A pure function of the state above plus the current time |
 | `Sources/Views/SkyLogView.swift` | The kept skies, with share and delete |
-| `Tests/StarsongTests` | 120 tests over the tunings, the rhythm, the haptics, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, and the Claude response parsing |
+| `Tests/StarsongTests` | 187 tests over the tunings, the rhythm, the haptics, the atlas projection, the sky, hit testing, star navigation, layering, the effect clock, persistence and its migration, the Claude response parsing, and the keepsake |
 | `Tests/StarsongUITests` | 9 tests over the accessibility tree and the drawing gesture, through the real UI |
 
 Effects are **time-parametric**: a shooting star knows where it started, how
@@ -210,6 +218,55 @@ Picking one lays it over a fresh field of invented stars, already drawn, so you
 can play it, keep it, or add to it. `AtlasTests` renders every figure to a
 contact sheet — a wrong coordinate is obvious in a picture and invisible in a
 number — and asserts that Orion's belt is still collinear after projection.
+
+## Fifty
+
+A birthday present, and the reason the `Sources/Fifty` folder exists. One screen,
+nothing to navigate: a name, fifty stars, and a card that says what a year held.
+Touch a star and it sings the note it sits at and shows you its year. Press play
+and the whole life goes past in order, the card following along.
+
+**Everything personal lives in one file.** `Sources/Fifty/Keepsake.swift` holds a
+name, the year she was born, two messages and fifty lines — one per year — and
+nothing else in the app has to be edited to make the keepsake somebody else's. A
+year left blank is still a star and still sings; it just shows its number, so it
+can be filled in later. Set `opensOnLaunch` to `true` in the same file and the
+app opens straight into it rather than into Starsong, which is the difference
+between a room inside your app and an app that is hers. It ships `false` so the
+tests still find the night sky where they expect it.
+
+**The stars are a spiral, not a row.** Fifty stars across a phone would be eight
+points apart and read as a dotted line. Wound out from the middle they are
+sixteen points apart at the closest, and the shape says the thing the list is
+for. Two musical properties then fall out of the geometry rather than being
+bolted on: height is pitch, so the melody rises and falls once per turn and
+widens as it goes; and `Music.gaps` reads rhythm from how far apart stars sit, so
+the early years — packed near the middle — come quickly and the later ones are
+given room. The whole fifty runs about fifteen seconds.
+
+Year one was at the exact centre in the first draft, and the opening decade came
+out five points apart: a smudge rather than ten stars. The spiral now starts a
+quarter of the way out, which costs nothing.
+
+**Her name is the key.** Letters become notes by the rule the rest of the app
+already uses — height is pitch — mapped in alphabetical order, A at the bottom of
+the band and each letter one note up. The band wraps after eleven letters, and
+the wrap is the point: stretching A-to-Z across the whole sky instead put M and N
+an octave apart, which turns most names into a siren. Wrapped, letters that are
+neighbours sound like neighbours, and AMANDA comes out as C-E-C-G-A-C, a phrase
+that steps. The name also picks the scale — through a written-out FNV hash rather
+than `hashValue`, which is seeded per process and would have tuned the keepsake
+to a different key on every launch — and wavers the spiral's radius, measured
+against the name's own average rather than the middle of the scale. Against the
+scale, AMANDA sings low enough that every one of its numbers came out negative
+and the waver was a uniform shrink with nothing of her name left in it.
+
+**Without seeing it**, the sky is one adjustable element that walks the years in
+order, sounding and reading each as it arrives — the same shape the main sky
+takes, for the same reason. Fifty separate elements would technically expose
+every year and nobody would swipe through fifty dots to find 1996. A year with
+nothing written for it still says so, because silence would leave you swiping
+past a star that just sang without ever hearing which one it was.
 
 ## Playing it without seeing it
 

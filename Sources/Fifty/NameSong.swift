@@ -46,9 +46,17 @@ enum NameSong {
         degrees(in: name).map { 1 - CGFloat($0) / CGFloat(Music.range) }
     }
 
-    /// The name as a row of stars, evenly spaced, which is how a name is said.
-    /// Even spacing means `Music.gaps` reads the line as steady and gives every
-    /// letter the same length — a name is not a rhythm, it is a phrase.
+    /// The name as a row of stars, evenly spaced.
+    ///
+    /// Even in *x*, that is. The heights are the letters, so the only thing
+    /// varying the reach from one letter to the next is how far the melody
+    /// leaps — and `Music.gaps` reads rhythm from exactly that. So a name
+    /// arrives with the lilt its own leaps give it rather than on a metronome,
+    /// and the app's rule that shape is rhythm needs no exception here.
+    ///
+    /// AMANDA runs quickly through its first three letters and ends on a note
+    /// four times as long, because the widest leap in it is the fall from its
+    /// top note home to the last A.
     static func stars(in name: String) -> [Star] {
         let heights = heights(in: name)
         guard heights.count > 1 else {

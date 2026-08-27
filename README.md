@@ -254,7 +254,11 @@ the band and each letter one note up. The band wraps after eleven letters, and
 the wrap is the point: stretching A-to-Z across the whole sky instead put M and N
 an octave apart, which turns most names into a siren. Wrapped, letters that are
 neighbours sound like neighbours, and AMANDA comes out as C-E-C-G-A-C, a phrase
-that steps. The name also picks the scale — through a written-out FNV hash rather
+that steps. Its rhythm needs no special case either: the letters are evenly
+spaced across the sky, so the only thing varying the reach between them is how
+far the melody leaps, and the app already turns reach into note values. AMANDA
+runs quickly through its first three letters and lands on a note four times as
+long — the fall from its top note home to the last A is the widest leap in it. The name also picks the scale — through a written-out FNV hash rather
 than `hashValue`, which is seeded per process and would have tuned the keepsake
 to a different key on every launch — and wavers the spiral's radius, measured
 against the name's own average rather than the middle of the scale. Against the

@@ -111,17 +111,26 @@ final class KeepsakeTests: XCTestCase {
         XCTAssertGreaterThan(Set(degrees).count, 1, "\(Keepsake.name) came out as a drone")
     }
 
-    func testTheNameIsSaidEvenly() {
+    /// The letters are evenly spaced across the sky, so the only thing varying
+    /// the reach between them is how far the melody leaps — and the app already
+    /// turns reach into note values. A name therefore arrives with a lilt
+    /// rather than on a metronome, which is the same rule the rest of the app
+    /// runs on rather than an exception carved out for names.
+    func testTheNameIsSaidWithTheLiltItsOwnLeapsGiveIt() {
         let stars = NameSong.stars(in: "Amanda")
         XCTAssertEqual(stars.count, 6)
-        let gaps = Music.gaps(between: stars).dropFirst()
-        // Even spacing means `Music.gaps` reads the line as steady, which is
-        // what a name is: a phrase, not a rhythm.
-        XCTAssertEqual(Set(gaps).count, 1)
         for star in stars {
             XCTAssertTrue((0...1).contains(star.x))
             XCTAssertTrue((0...1).contains(star.y))
         }
+
+        let gaps = Array(Music.gaps(between: stars).dropFirst())
+        XCTAssertGreaterThan(Set(gaps).count, 1, "the name ticks like a metronome")
+        XCTAssertEqual(gaps.min(), Music.shortestGap)
+        XCTAssertEqual(gaps.max(), Music.longestGap)
+        // The widest leap in AMANDA is the fall from its top note home to the
+        // last A, so it ends on its longest note rather than in the middle.
+        XCTAssertEqual(gaps.last, Music.longestGap)
     }
 
     /// `hashValue` is seeded per process, so a keepsake tuned with it would be
@@ -234,9 +243,16 @@ final class KeepsakeTests: XCTestCase {
     /// shrink that no longer had anything to do with her name.
     func testTheWaverPushesOutAsOftenAsItPullsIn() throws {
         let profile = FiftySky.waverProfile(for: "Amanda")
-        XCTAssertEqual(try XCTUnwrap(profile.max()), 1, accuracy: 0.0001)
-        XCTAssertEqual(try XCTUnwrap(profile.min()), -1, accuracy: 0.0001)
         XCTAssertEqual(profile.reduce(0, +) / Double(profile.count), 0, accuracy: 0.0001)
+        XCTAssertTrue(profile.contains { $0 > 0 }, "the name only ever pulls in")
+        XCTAssertTrue(profile.contains { $0 < 0 }, "the name only ever pushes out")
+
+        // Scaled by the furthest any letter strays from that mean, so the waver
+        // uses its full range and never more. Only the extreme side reaches 1:
+        // AMANDA leans low, so its deepest dip is half the height of its peak,
+        // and flattening that out would be inventing symmetry it does not have.
+        XCTAssertEqual(try XCTUnwrap(profile.map { abs($0) }.max()), 1, accuracy: 0.0001)
+        XCTAssertTrue(profile.allSatisfy { abs($0) <= 1 })
     }
 
     /// A one-letter name has no deviation from its own mean, and dividing by

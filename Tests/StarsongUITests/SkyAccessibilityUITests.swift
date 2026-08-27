@@ -184,3 +184,36 @@ extension SkyAccessibilityUITests {
         print("SHOT \(name) \(URL.temporaryDirectory.appendingPathComponent("\(name).png").path)")
     }
 }
+
+extension SkyAccessibilityUITests {
+    /// The keepsake is a full-screen cover rather than a sheet — a different
+    /// presentation path from the three this file already distrusts, and worth
+    /// opening for real rather than assuming.
+    ///
+    /// Matched on the shape of the label rather than on "Amanda", because the
+    /// name is content: `Keepsake.swift` is meant to be edited, and a test that
+    /// breaks when it is would be a test punishing the one thing the file is for.
+    func testHerKeepsakeOpensAndCloses() {
+        let app = launch()
+        let way = app.buttons
+            .matching(NSPredicate(format: "label ENDSWITH %@", "'s fifty")).firstMatch
+        XCTAssertTrue(way.waitForExistence(timeout: 15), "the keepsake has no way in")
+        way.tap()
+
+        let sky = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label ENDSWITH %@", "'s sky")).firstMatch
+        XCTAssertTrue(sky.waitForExistence(timeout: 10), "the keepsake never presented")
+
+        let spoken = sky.value as? String
+        XCTAssertTrue(spoken?.contains("years") ?? false,
+                      "her sky should say how many years it holds; got \(spoken ?? "nothing")")
+
+        for name in ["Her name", "Play her life", "Close"] {
+            XCTAssertTrue(app.buttons[name].exists, "\(name) is missing from the keepsake")
+        }
+
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["New sky"].waitForExistence(timeout: 10),
+                      "the keepsake did not close")
+    }
+}

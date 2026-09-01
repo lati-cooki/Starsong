@@ -10,3 +10,6 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 .DS_Store
+
+# Local AI-session activity log (shadow copies + command log); machine state, not source
+.ai-activity/

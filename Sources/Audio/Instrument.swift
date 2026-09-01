@@ -203,7 +203,22 @@ enum Instrument: String, CaseIterable, Identifiable, Codable, Hashable {
         }
     }
 
-    /// Dual detuned sines with a soft harmonic swell, slow attack, and gentle decay.
+    /// Two detuned sines that sustain, an octave, and a bloom two octaves up
+    /// that swells in and settles — the "harmonic swell" of the blurb.
+    ///
+    /// Two things here are the way they are because the tests measured them:
+    ///
+    /// - There is no fifth. The first version had a partial at 1.498x, and a
+    ///   fifth inside a single voice makes the waveform repeat every *two*
+    ///   cycles of the fundamental, so the pad read an octave low by
+    ///   autocorrelation — which is also how an ear finds a pitch. Every partial
+    ///   is a whole-number multiple of the fundamental now. Fifths are the bed's
+    ///   job (`Harmony`), not a timbre's.
+    /// - The bloom is what stops the pad being a bell. Without it, a mid-speed
+    ///   `exp(-1.4t)` fade on a plain tone landed within a few percent of Bell
+    ///   on both brightness and decay. A pad's identity is that it *sustains*,
+    ///   so the core decays slowly, and the bloom gives it a brightness Brass —
+    ///   the other sustaining voice — does not have.
     private static func padSamples(_ frequency: Double, _ duration: Double,
                                    _ sampleRate: Double, _ count: Int) -> [Double] {
         let detune1 = 1.0025
@@ -214,9 +229,10 @@ enum Instrument: String, CaseIterable, Identifiable, Codable, Hashable {
             let wave1 = sin(2 * .pi * frequency * detune1 * t)
             let wave2 = sin(2 * .pi * frequency * detune2 * t)
             let octave = sin(2 * .pi * frequency * 2.0 * t) * 0.25
-            let fifth = sin(2 * .pi * frequency * 1.498 * t) * 0.15
-            let tone = (wave1 + wave2 + octave + fifth) * exp(-t * 1.4)
-            return tone * shape(t, duration: duration, attack: attack, release: 0.12)
+            let core = (wave1 + wave2 + octave) * exp(-t * 0.5)
+            let bloom = sin(2 * .pi * frequency * 4.0 * t) * 0.6
+                * (1 - exp(-t * 12.0)) * exp(-t * 1.5)
+            return (core + bloom) * shape(t, duration: duration, attack: attack, release: 0.12)
         }
     }
 

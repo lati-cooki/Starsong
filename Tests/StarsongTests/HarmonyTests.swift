@@ -422,4 +422,111 @@ final class HarmonyTests: XCTestCase {
                            tuning.name)
         }
     }
+
+    // MARK: - Fit
+
+    /// Fit is the time a chord's tones are sounding inside a span. A span
+    /// entirely on the root, under major's (0, 7), is worth the whole span;
+    /// under (2, 9) it is worth nothing.
+    func testFitCountsChordToneTime() {
+        let major = Music.tunings[0]
+        let stars = line(degrees: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   // steady, all on the root
+        let span = Harmony.spans(under: stars)[0]
+        let onRoot = Harmony.Chord(root: 0, tones: [0, 7])
+        let offRoot = Harmony.Chord(root: 2, tones: [2, 9])
+        let length = span.upperBound - span.lowerBound
+        XCTAssertEqual(Harmony.fit(of: onRoot, in: span, under: stars, in: major),
+                       length, accuracy: 1e-9)
+        XCTAssertEqual(Harmony.fit(of: offRoot, in: span, under: stars, in: major), 0, accuracy: 1e-9)
+    }
+
+    /// A line that sits on degrees 1 and 3 — pitch classes 2 and 7 in major —
+    /// is covered entirely by the dyad (7, 2) and only half by (0, 7) or
+    /// (2, 9). Fit has to pick the one that covers it.
+    func testFitPicksTheChordThatCoversTheMelody() {
+        let major = Music.tunings[0]
+        let stars = line(degrees: Array(repeating: [1, 3], count: 12).flatMap { $0 })
+        let chords = Harmony.chords(under: stars, in: major)
+        XCTAssertGreaterThanOrEqual(chords.count, 3, "need a free span before the cadence")
+        XCTAssertEqual(chords[0].root, 7, "first span should be the dyad covering both notes")
+    }
+
+    /// The note under a chord change is the one the ear checks first, so a
+    /// chord that holds it outranks any that does not. By duration alone the
+    /// keepsake put a chord tone under five of nine changes; downbeat first
+    /// puts one under every change the tuning allows. So: wherever *some*
+    /// candidate contains the note at a span's start, the chosen chord must.
+    func testAChordChangeLandsOnAChordToneWheneverItCan() {
+        for tuning in Music.tunings {
+            for stars in [FiftySky.stars(), line(9), line(16), line(degrees: [4, 8, 1, 6, 12, 3, 9, 2, 7, 0, 5, 11])] {
+                let onsets = Music.schedule(for: stars)
+                let spans = Harmony.spans(under: stars)
+                let chords = Harmony.chords(under: stars, in: tuning)
+                let candidates = Harmony.candidates(for: stars, in: tuning)
+                XCTAssertEqual(chords.count, spans.count, tuning.name)
+                for (i, (span, chord)) in zip(spans, chords).enumerated() where i < spans.count - 1 {
+                    let note = onsets.firstIndex { abs($0 - span.lowerBound) < 1e-9 }!
+                    let pc = Music.semitone(forY: stars[note].y, in: tuning) % 12
+                    let pool = i == spans.count - 2
+                        ? candidates.filter { $0 != Harmony.home(for: stars, in: tuning) }
+                        : candidates
+                    let possible = pool.contains { Harmony.voiced($0).contains(pc) }
+                    if possible {
+                        XCTAssertTrue(Harmony.voiced(chord).contains(pc),
+                                      "\(tuning.name): span \(i) opens on \(pc) under \(chord.tones)")
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Cadence
+
+    /// The point of the exercise. Whatever the melody, the last chord is home
+    /// and it contains the note the tune rests on, so a loop seam sounds like
+    /// a return rather than a join.
+    func testEveryProgressionEndsAtHomeUnderTheLastNote() {
+        for tuning in Music.tunings {
+            for stars in (2...16).map(line) + [FiftySky.stars()] {
+                let chords = Harmony.chords(under: stars, in: tuning)
+                XCTAssertEqual(chords.last, Harmony.home(for: stars, in: tuning),
+                               "\(tuning.name), \(stars.count) notes did not come home")
+                XCTAssertTrue(Harmony.voiced(chords.last!).contains(Harmony.tonic(of: stars, in: tuning)),
+                              "\(tuning.name): the last chord does not hold the last note")
+            }
+        }
+    }
+
+    /// With three or more spans, the chord before the last is not home, so the
+    /// ending is a real leaving and returning rather than a coin toss. Two
+    /// spans or one are too short to have a journey in them.
+    func testTheChordBeforeTheLastIsAway() {
+        for tuning in Music.tunings {
+            for stars in (2...16).map(line) + [FiftySky.stars()] {
+                let chords = Harmony.chords(under: stars, in: tuning)
+                guard chords.count >= 3 else { continue }
+                XCTAssertNotEqual(chords[chords.count - 2], Harmony.home(for: stars, in: tuning),
+                                  "\(tuning.name), \(stars.count) notes: no cadence")
+            }
+        }
+    }
+
+    /// Ties fall to the chord already sounding, so a span that is indifferent
+    /// does not change chord for the sake of it.
+    func testTiesStayOnThePreviousChord() {
+        let major = Music.tunings[0]
+        // Degree 2 is pitch class 4, which only the dyad (9, 4) holds; degree
+        // 3 is 7, held by (0, 7) and (7, 2). A span entirely on degree 3 after
+        // one on degree 2: (0,7) and (7,2) tie, neither is the previous chord
+        // (9,4), and home is (root of the last note) — make the last note
+        // degree 1 (pc 2) so home is (2, 9) and is not in the tie either.
+        // Then the lower root, 0, wins. (The second span is the penultimate
+        // one, so home is excluded from its pool anyway.)
+        let stars = line(degrees: Array(repeating: 2, count: 8) + Array(repeating: 3, count: 8)
+                                  + Array(repeating: 2, count: 8) + [1])
+        let chords = Harmony.chords(under: stars, in: major)
+        XCTAssertEqual(chords.count, 3)
+        XCTAssertEqual(chords[0].root, 9)
+        XCTAssertEqual(chords[1].root, 0, "tie between (0,7) and (7,2) should go to the lower root")
+    }
 }

@@ -217,6 +217,75 @@ enum Harmony {
         return zip(openings, ends).map { $0..<$1 }
     }
 
+    // MARK: - Fit
+
+    /// How well a chord suits a span: the time, in seconds, that notes of the
+    /// chord's pitch classes are sounding inside it. Each melody note owns the
+    /// time from its onset to the next (the last, to the end of the cycle).
+    ///
+    static func fit(of chord: Chord, in span: Range<Double>,
+                    under stars: [Star], in tuning: Music.Tuning) -> Double {
+        let tones = Set(voiced(chord))
+        let onsets = Music.schedule(for: stars)
+        let cycle = Music.cycleLength(for: stars)
+        var covered = 0.0
+        for (i, star) in stars.enumerated() {
+            let from = onsets[i]
+            let to = i + 1 < onsets.count ? onsets[i + 1] : cycle
+            let overlap = min(to, span.upperBound) - max(from, span.lowerBound)
+            guard overlap > 0, tones.contains(Music.semitone(forY: star.y, in: tuning) % 12) else { continue }
+            covered += overlap
+        }
+        return covered
+    }
+
+    /// The pitch class of the note sounding at `time`: the last one to have
+    /// started. Used for the note under a chord change.
+    static func pitchClass(at time: Double, under stars: [Star], in tuning: Music.Tuning) -> Int {
+        let onsets = Music.schedule(for: stars)
+        let sounding = onsets.lastIndex { $0 <= time + 1e-9 } ?? 0
+        return Music.semitone(forY: stars[sounding].y, in: tuning) % 12
+    }
+
+    /// One chord per span, chosen by fit, with the cadence forced.
+    ///
+    /// The last span is home, always. With three or more spans the one before
+    /// it is the best-fitting chord that is *not* home, so the ending is a real
+    /// leaving and returning. Two spans or one are too short for a journey and
+    /// take fit alone, with the last still forced home.
+    ///
+    /// A chord that holds the note under the change outranks any that does
+    /// not, whatever their fit: that note is the one the ear checks first, and
+    /// by duration alone the keepsake put a chord tone under five of nine
+    /// changes where downbeat-first puts one under every change the tuning
+    /// allows. Weighting the downbeat by a bar instead was tried and is not
+    /// safe — a span can run three seconds, so a chord missing the downbeat
+    /// could still win on coverage.
+    ///
+    /// Then fit. Ties go to the chord already sounding, then to home, then to
+    /// the lower root — in that order, as the tuple compares.
+    static func chords(under stars: [Star], in tuning: Music.Tuning) -> [Chord] {
+        let spans = spans(under: stars)
+        let home = home(for: stars, in: tuning)
+        let candidates = candidates(for: stars, in: tuning)
+        var chosen: [Chord] = []
+        for (index, span) in spans.enumerated() {
+            if index == spans.count - 1 { chosen.append(home); continue }
+            let cadence = spans.count >= 3 && index == spans.count - 2
+            let pool = cadence ? candidates.filter { $0 != home } : candidates
+            let underneath = pitchClass(at: span.lowerBound, under: stars, in: tuning)
+            func rank(_ chord: Chord) -> (Int, Double, Int, Int, Int) {
+                (voiced(chord).contains(underneath) ? 1 : 0,
+                 fit(of: chord, in: span, under: stars, in: tuning),
+                 chord == chosen.last ? 1 : 0,
+                 chord == home ? 1 : 0,
+                 -chord.root)
+            }
+            chosen.append(pool.max { rank($0) < rank($1) } ?? home)
+        }
+        return chosen
+    }
+
     // MARK: - Pitch
 
     /// The bed sits an octave below the melody's root, so it is underneath the

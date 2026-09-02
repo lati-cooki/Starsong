@@ -32,12 +32,13 @@ final class HarmonyTests: XCTestCase {
     /// The whole reason the bed cannot sour a melody: every note it plays is a
     /// degree of the same tuning the melody is drawing from, so it can only
     /// sound notes the line could already have sung. Checked against the two
-    /// octaves the dyads are allowed to reach across.
+    /// octaves the dyads are allowed to reach across, on drawn lines and on
+    /// the keepsake.
     func testEveryChordToneIsAMemberOfItsTuning() {
         for tuning in Music.tunings {
             let members = Set(tuning.degrees + tuning.degrees.map { $0 + 12 })
-            for bars in 1...12 {
-                for chord in Harmony.chords(bars: bars, in: tuning) {
+            for stars in (2...16).map(line) + [FiftySky.stars()] {
+                for chord in Harmony.chords(under: stars, in: tuning) {
                     for tone in chord.tones {
                         XCTAssertTrue(members.contains(tone),
                                       "\(tuning.name): \(tone) is not in \(tuning.degrees)")
@@ -48,23 +49,26 @@ final class HarmonyTests: XCTestCase {
     }
 
     /// Root and fifth, never a third — the five tunings disagree about whether
-    /// they are major or minor and a third would pick a side.
-    func testEveryChordIsARootAndAFifth() {
+    /// they are major or minor and a third would pick a side. The one other
+    /// shape allowed is the bare tonic, for a tuning without the tonic's fifth.
+    func testEveryChordIsARootAndAFifthOrTheTonicAlone() {
         for tuning in Music.tunings {
             for chord in Harmony.fifthDyads(in: tuning) {
                 XCTAssertEqual(chord.tones.count, 2, tuning.name)
                 XCTAssertEqual(chord.tones[0], chord.root, tuning.name)
                 XCTAssertEqual(chord.tones[1] - chord.tones[0], 7, tuning.name)
             }
-        }
-    }
-
-    /// Harmonic motion has to be available in every tuning, or the bed is a
-    /// drone in some of them and the cadence has nothing to return *from*.
-    func testEveryTuningHasSomewhereToGo() {
-        for tuning in Music.tunings {
-            XCTAssertGreaterThanOrEqual(Harmony.fifthDyads(in: tuning).count, 2, tuning.name)
-            XCTAssertNotEqual(Harmony.away(in: tuning).root, 0, tuning.name)
+            for stars in (2...16).map(line) + [FiftySky.stars()] {
+                for chord in Harmony.chords(under: stars, in: tuning) {
+                    XCTAssertEqual(chord.tones.first, chord.root, tuning.name)
+                    switch chord.tones.count {
+                    case 1: XCTAssertEqual(chord, Harmony.home(for: stars, in: tuning),
+                                           "\(tuning.name): only home may be a bare note")
+                    case 2: XCTAssertEqual(chord.tones[1] - chord.tones[0], 7, tuning.name)
+                    default: XCTFail("\(tuning.name): \(chord.tones) is not a dyad")
+                    }
+                }
+            }
         }
     }
 
@@ -253,81 +257,36 @@ final class HarmonyTests: XCTestCase {
 
     // MARK: - Cadence
 
-    /// The point of the exercise. Whatever length the melody is, the bed's last
-    /// bar is home, so a loop seam sounds like a return rather than a join.
-    func testEveryProgressionEndsAtHome() {
-        for tuning in Music.tunings {
-            for bars in 1...16 {
-                let chords = Harmony.chords(bars: bars, in: tuning)
-                XCTAssertEqual(chords.count, bars, tuning.name)
-                XCTAssertEqual(chords.last, Harmony.tonic(in: tuning),
-                               "\(tuning.name) at \(bars) bars did not come home")
-            }
-        }
-    }
-
-    func testProgressionsStartAtHomeToo() {
-        for tuning in Music.tunings {
-            for bars in 1...16 {
-                XCTAssertEqual(Harmony.chords(bars: bars, in: tuning).first,
-                               Harmony.tonic(in: tuning), tuning.name)
-            }
-        }
-    }
-
-    /// Three bars is the first length with room to leave and come back. Two or
-    /// fewer hold home deliberately — a drone is the honest thing to do with a
-    /// melody too short to have a journey in it.
-    func testShortMelodiesDroneAndLongerOnesMove() {
-        for tuning in Music.tunings {
-            for bars in 1...2 {
-                let chords = Harmony.chords(bars: bars, in: tuning)
-                XCTAssertTrue(chords.allSatisfy { $0 == Harmony.tonic(in: tuning) },
-                              "\(tuning.name) at \(bars) bars should drone")
-            }
-            for bars in 3...16 {
-                let chords = Harmony.chords(bars: bars, in: tuning)
-                XCTAssertTrue(chords.contains(Harmony.away(in: tuning)),
-                              "\(tuning.name) at \(bars) bars never leaves home")
-            }
-        }
-    }
-
     // MARK: - Fitting the melody
 
-    /// The bed has to cover the melody including the rest at the loop seam,
-    /// because that rest is where the arrival still needs to be sounding.
+    /// The bed has one chord per span and the spans tile the cycle, so the
+    /// arrival is still sounding through the rest at the loop seam.
     func testTheBedCoversTheWholeCycle() {
         for tuning in Music.tunings {
             for count in 2...12 {
                 let notes = line(count)
                 let bed = Harmony.bed(under: notes, in: tuning)
-                XCTAssertFalse(bed.isEmpty, "\(count) notes got no bed")
-                let covered = (bed.last!.delay + Harmony.barLength)
-                XCTAssertGreaterThanOrEqual(covered + 1e-9,
-                                            Music.cycleLength(for: notes),
-                                            "\(tuning.name), \(count) notes: bed ends early")
+                let spans = Harmony.spans(under: notes)
+                XCTAssertEqual(bed.count, spans.count, "\(tuning.name), \(count) notes")
+                XCTAssertEqual(bed.first?.delay, 0, "\(tuning.name), \(count) notes: no downbeat chord")
+                for (voicing, span) in zip(bed, spans) {
+                    XCTAssertEqual(voicing.delay, span.lowerBound, accuracy: 1e-9, tuning.name)
+                    XCTAssertEqual(voicing.duration, Harmony.noteLength, tuning.name)
+                }
             }
         }
     }
 
-    /// One chord per bar, in order, no gaps between them.
-    func testChordsLandOneToABarInOrder() {
-        let bed = Harmony.bed(under: line(9), in: Music.default)
-        for (bar, voicing) in bed.enumerated() {
-            XCTAssertEqual(voicing.delay, Double(bar) * Harmony.barLength, accuracy: 1e-9)
-        }
-    }
-
-    /// Each chord has to be gone before the next one arrives. Overlapping them
-    /// is what turned the first attempt into a drone — see `Harmony.noteLength`
-    /// — and on a voice that decays there is nothing to gain by it.
-    func testChordsDieInsideTheirOwnBar() {
-        let bed = Harmony.bed(under: line(9), in: Music.default)
-        XCTAssertGreaterThan(bed.count, 1, "need at least two bars to compare")
+    /// A chord is gone before the next bar. Overlapping them is what turned the
+    /// first attempt into a drone — see `Harmony.noteLength`. A span opened
+    /// early by a breath is half a bar, so a plucked tail can still be dying
+    /// as the next chord lands; that is a string ringing on, not a pad.
+    func testChordsDieInsideABar() {
+        let bed = Harmony.bed(under: line(16), in: Music.default)
+        XCTAssertGreaterThan(bed.count, 1, "need at least two spans to compare")
         for voicing in bed {
             XCTAssertLessThan(voicing.duration + Harmony.roll, Harmony.barLength,
-                              "a chord is still sounding when the next one lands")
+                              "a chord is still sounding when the next bar lands")
         }
     }
 
@@ -366,8 +325,8 @@ final class HarmonyTests: XCTestCase {
     /// true of the unfolded dyads.
     func testTheBedSitsBelowTheMelody() {
         for tuning in Music.tunings {
-            for bars in 1...12 {
-                for chord in Harmony.chords(bars: bars, in: tuning) {
+            for stars in (2...16).map(line) + [FiftySky.stars()] {
+                for chord in Harmony.chords(under: stars, in: tuning) {
                     for tone in Harmony.voiced(chord) {
                         XCTAssertLessThan(Harmony.frequency(semitonesAboveRoot: tone),
                                           Music.rootFrequency,
@@ -395,12 +354,12 @@ final class HarmonyTests: XCTestCase {
     }
 
     /// Folding a fifth that runs high turns it into the fourth below — the same
-    /// pair of notes. Hirajoshi's away chord is the case that needs it.
+    /// pair of notes. Hirajoshi's dyad on 7 is the case that needs it.
     func testAFifthThatRunsHighBecomesTheFourthBelow() {
         let hirajoshi = Music.tunings.first { $0.id == "hirajoshi" }!
-        let away = Harmony.away(in: hirajoshi)
-        XCTAssertEqual(away.tones, [7, 14])
-        XCTAssertEqual(Harmony.voiced(away), [7, 2])
+        let onSeven = Harmony.fifthDyads(in: hirajoshi).first { $0.root == 7 }!
+        XCTAssertEqual(onSeven.tones, [7, 14])
+        XCTAssertEqual(Harmony.voiced(onSeven), [7, 2])
     }
 
     func testIntervalClassMeasuresBothDirections() {
@@ -410,17 +369,6 @@ final class HarmonyTests: XCTestCase {
         XCTAssertEqual(Harmony.intervalClass(6), 6)    // the tritone is its own inverse
         XCTAssertEqual(Harmony.intervalClass(-1), 1)
         XCTAssertEqual(Harmony.intervalClass(13), 1)
-    }
-
-    /// Not a chosen list — this is what "travel furthest from home" returns, and
-    /// it comes out as V, iv, v, iv and III. Pinned so a change to the rule or
-    /// to the tunings has to be looked at rather than just noticed later.
-    func testTheAwayChordIsTheOneThatTravelsFurthest() {
-        let expected = ["major": 7, "minor": 5, "hirajoshi": 7, "in": 5, "balinese": 3]
-        for tuning in Music.tunings {
-            XCTAssertEqual(Harmony.away(in: tuning).root, expected[tuning.id],
-                           tuning.name)
-        }
     }
 
     // MARK: - Fit

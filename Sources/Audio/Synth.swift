@@ -29,8 +29,9 @@ final class Synth {
     /// round-robin pushes past that and stops the opening notes mid-ring, which
     /// is the fault that sizing the pool for fifty notes went and fixed.
     ///
-    /// The bed needs far fewer: chords change once a bar and ring `Harmony.ring`
-    /// past it, so at most two bars of two tones are sounding at once.
+    /// The bed needs far fewer: chords change about once a bar and ring
+    /// `Harmony.noteLength` past it, so at most two bars of two tones are
+    /// sounding at once.
     enum Channel {
         case melody, bed
     }

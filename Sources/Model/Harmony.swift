@@ -1,6 +1,6 @@
 import Foundation
 
-/// The chords under a melody.
+/// The chords under a melody, derived from the melody.
 ///
 /// Every one of `Music.tunings` is pentatonic, which is why anything you draw
 /// sounds lovely: there is no wrong note to land on. It is also why nothing you
@@ -22,18 +22,29 @@ import Foundation
 /// has 0-1 and 7-8, balinese has 0-1). What the rule flagged was each scale's
 /// own character, which the melody is already free to play, not anything the
 /// bed was doing to it.
+///
+/// **The bed follows the tune.** The second attempt built the bed from the bar
+/// count — home on degree 0, home and away alternating by bar parity, a chord
+/// every 2.4s regardless — and it was in a different key from the melody it
+/// sat under: the keepsake rests on degree 4 in every tuning, and the bass
+/// insisted on 0. Four rules replace that. Home is where the tune rests
+/// (`tonic`, `home`). Chords change only on melody onsets, at about a bar
+/// (`spans`). Each is chosen by how much of the melody it covers, with the note
+/// under the change held first (`fit`, `chords`). And the cadence is forced:
+/// the last chord is home and the one before it is not (`chords`).
 enum Harmony {
 
     // MARK: - Time
 
-    /// A bar, in pulses.
+    /// The target length of a span, in pulses.
     ///
     /// `Music.pulse` is the shortest thing a melody subdivides to, so it reads
     /// as an eighth rather than a beat — at 0.3s that is about 100bpm, and eight
     /// of them is one bar of four. A chord every 2.4s is slow enough to be heard
     /// as harmony; changing every bar of *two* was tried on paper and is fast
     /// enough that the bed starts sounding like a second melody competing with
-    /// the line.
+    /// the line. Not a grid: chords change on melody onsets, and `spans` uses
+    /// this as the length to wait for.
     static let barPulses = 8
     static var barLength: Double { Music.pulse * Double(barPulses) }
 
@@ -137,45 +148,6 @@ enum Harmony {
             chords.append(dyad)
         }
         return chords
-    }
-
-    /// Home.
-    static func tonic(in tuning: Music.Tuning) -> Chord {
-        Chord(root: 0, tones: [0, 7])
-    }
-
-    /// The chord that travels furthest from home, measured by interval class so
-    /// that a fifth up and a fourth down count as the same journey. Ties go to
-    /// the lower root, which is what `max(by:)` does with a strict comparison.
-    ///
-    /// Across the five tunings this picks, in order: the fifth, the fourth, the
-    /// fifth, the fourth, and the third — V, iv, v, iv, III. Those were not
-    /// chosen; they are what the rule returns, which is a good sign the rule is
-    /// the right one.
-    static func away(in tuning: Music.Tuning) -> Chord {
-        let candidates = fifthDyads(in: tuning).filter { $0.root != 0 }
-        guard !candidates.isEmpty else { return tonic(in: tuning) }
-        return candidates.max { intervalClass($0.root) < intervalClass($1.root) }!
-    }
-
-    /// One chord per bar: home at both ends, alternating in between.
-    ///
-    /// Ending home is the cadence, and it is the point of the whole exercise —
-    /// it is what makes a loop seam sound like a return rather than a join.
-    ///
-    /// Two bars or fewer have no room to leave and come back, so they hold home
-    /// and act as a drone. At four bars the rule yields two bars of home at the
-    /// end; that is a cadence lengthening rather than a mistake, and it sounds
-    /// like an ending, so it is left alone.
-    static func chords(bars: Int, in tuning: Music.Tuning) -> [Chord] {
-        guard bars > 0 else { return [] }
-        let home = tonic(in: tuning)
-        guard bars > 2 else { return Array(repeating: home, count: bars) }
-        let elsewhere = away(in: tuning)
-        return (0..<bars).map { bar in
-            guard bar != 0, bar != bars - 1 else { return home }
-            return bar.isMultiple(of: 2) ? home : elsewhere
-        }
     }
 
     // MARK: - Spans
@@ -321,19 +293,10 @@ enum Harmony {
         let duration: Double
     }
 
-    /// Enough bars to cover one time round the line, with the chords above.
-    ///
-    /// Sized from `Music.cycleLength` rather than from the note count, so the
-    /// bed covers the same span the melody does — including the rest at the loop
-    /// seam, which is where the arrival needs to still be sounding.
+    /// One voicing per span, with the chord fit chose for it.
     static func bed(under stars: [Star], in tuning: Music.Tuning) -> [Voicing] {
-        guard stars.count >= 2 else { return [] }
-        let cycle = Music.cycleLength(for: stars)
-        let bars = max(Int((cycle / barLength).rounded(.up)), 1)
-        return chords(bars: bars, in: tuning).enumerated().map { bar, chord in
-            Voicing(chord: chord,
-                    delay: Double(bar) * barLength,
-                    duration: noteLength)
+        zip(spans(under: stars), chords(under: stars, in: tuning)).map { span, chord in
+            Voicing(chord: chord, delay: span.lowerBound, duration: noteLength)
         }
     }
 

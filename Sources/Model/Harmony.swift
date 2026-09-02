@@ -152,6 +152,11 @@ enum Harmony {
 
     // MARK: - Spans
 
+    /// Slop for comparing accumulated onsets against exact multiples of the
+    /// pulse. Load-bearing: eight gaps of 0.3 land at 2.3999999999999995, not
+    /// 2.4, and without this the keepsake gets seven spans instead of nine.
+    private static let tolerance = 1e-9
+
     /// Where the chords change. Each span is a stretch of the cycle, in
     /// seconds from the downbeat, that one chord covers.
     ///
@@ -178,10 +183,10 @@ enum Harmony {
         let cycle = Music.cycleLength(for: stars)
         var openings = [0.0]
         for i in 1..<onsets.count {
-            guard cycle - onsets[i] >= barLength / 2 - 1e-9 else { break }
+            guard cycle - onsets[i] >= barLength / 2 - tolerance else { break }
             let running = onsets[i] - openings.last!
-            let breath = gaps[i] >= Music.longestGap - 1e-9
-            if running >= barLength - 1e-9 || (breath && running >= barLength / 2 - 1e-9) {
+            let breath = gaps[i] >= Music.longestGap - tolerance
+            if running >= barLength - tolerance || (breath && running >= barLength / 2 - tolerance) {
                 openings.append(onsets[i])
             }
         }
@@ -194,7 +199,6 @@ enum Harmony {
     /// How well a chord suits a span: the time, in seconds, that notes of the
     /// chord's pitch classes are sounding inside it. Each melody note owns the
     /// time from its onset to the next (the last, to the end of the cycle).
-    ///
     static func fit(of chord: Chord, in span: Range<Double>,
                     under stars: [Star], in tuning: Music.Tuning) -> Double {
         let tones = Set(voiced(chord))
@@ -214,6 +218,7 @@ enum Harmony {
     /// The pitch class of the note sounding at `time`: the last one to have
     /// started. Used for the note under a chord change.
     static func pitchClass(at time: Double, under stars: [Star], in tuning: Music.Tuning) -> Int {
+        guard !stars.isEmpty else { return 0 }
         let onsets = Music.schedule(for: stars)
         let sounding = onsets.lastIndex { $0 <= time + 1e-9 } ?? 0
         return Music.semitone(forY: stars[sounding].y, in: tuning) % 12
@@ -271,8 +276,8 @@ enum Harmony {
     /// The chord as it is actually sounded: every tone folded into the one
     /// octave above `bassFrequency`.
     ///
-    /// Needed because the fifth can run high. `away` in hirajoshi is rooted on
-    /// 7, so its fifth is 14, and 14 semitones above a bass of 110 Hz is 247 Hz
+    /// Needed because the fifth can run high. Hirajoshi's dyad on 7, so its
+    /// fifth is 14, and 14 semitones above a bass of 110 Hz is 247 Hz
     /// — above the 220 Hz root, which is the lowest note a star can sing. Left
     /// unfolded the bed pokes up into the melody instead of sitting under it.
     ///

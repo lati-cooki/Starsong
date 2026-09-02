@@ -134,8 +134,8 @@ final class KeepsakeModel {
         let durations = Music.durations(for: stars)
         let now = Date()
 
-        // A chord on each bar line, keeping coming home, so fifty years read as
-        // one piece of music rather than fifty notes in a row.
+        // A chord at each phrase change, following the tune, so the melody
+        // has something to arrive against.
         Harmony.sound(under: stars, in: tuning)
         for (age, star) in stars.enumerated() {
             let pan = Float(star.x - 0.5) * 1.4

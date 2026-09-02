@@ -260,8 +260,6 @@ final class HarmonyTests: XCTestCase {
         }
     }
 
-    // MARK: - Cadence
-
     // MARK: - Fitting the melody
 
     /// The bed has one chord per span and the spans tile the cycle, so the

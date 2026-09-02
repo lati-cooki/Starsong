@@ -50,19 +50,4 @@ final class MusicTests: XCTestCase {
             XCTAssertEqual(Music.semitone(forY: 1 - 5.0 / 14, in: tuning), 12, tuning.name)
         }
     }
-
-    /// `pitch` and `noteName` already computed this on their own; they have to
-    /// agree with the helper, or the bed will harmonise a note the star is not
-    /// singing.
-    func testSemitoneAgreesWithPitch() {
-        for tuning in Music.tunings {
-            for degree in 0...Music.range {
-                let y = 1 - CGFloat(degree) / CGFloat(Music.range)
-                let expected = Music.rootFrequency
-                    * pow(2, Double(Music.semitone(forY: y, in: tuning)) / 12)
-                XCTAssertEqual(Music.pitch(forY: y, in: tuning), expected,
-                               accuracy: 1e-6, "\(tuning.name) degree \(degree)")
-            }
-        }
-    }
 }

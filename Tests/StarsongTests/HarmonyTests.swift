@@ -53,6 +53,7 @@ final class HarmonyTests: XCTestCase {
     /// shape allowed is the bare tonic, for a tuning without the tonic's fifth.
     func testEveryChordIsARootAndAFifthOrTheTonicAlone() {
         for tuning in Music.tunings {
+            XCTAssertGreaterThanOrEqual(Harmony.fifthDyads(in: tuning).count, 2, "\(tuning.name) has nowhere to go")
             for chord in Harmony.fifthDyads(in: tuning) {
                 XCTAssertEqual(chord.tones.count, 2, tuning.name)
                 XCTAssertEqual(chord.tones[0], chord.root, tuning.name)
@@ -252,7 +253,11 @@ final class HarmonyTests: XCTestCase {
         XCTAssertEqual(Harmony.spans(under: stars).count, 1)
         // Two more notes and there is room: the span opens on the ninth.
         let longer = line(degrees: Array(repeating: 0, count: 13))
-        XCTAssertEqual(Harmony.spans(under: longer).map(\.lowerBound), [0, Harmony.barLength])
+        let opens = Harmony.spans(under: longer).map(\.lowerBound)
+        XCTAssertEqual(opens.count, 2)
+        for (open, expected) in zip(opens, [0, Harmony.barLength]) {
+            XCTAssertEqual(open, expected, accuracy: 1e-9)
+        }
     }
 
     // MARK: - Cadence
@@ -278,16 +283,13 @@ final class HarmonyTests: XCTestCase {
     }
 
     /// A chord is gone before the next bar. Overlapping them is what turned the
-    /// first attempt into a drone — see `Harmony.noteLength`. A span opened
-    /// early by a breath is half a bar, so a plucked tail can still be dying
-    /// as the next chord lands; that is a string ringing on, not a pad.
+    /// first attempt into a drone — see `Harmony.noteLength`. Every voicing
+    /// rings `noteLength`, so this is a relation between two constants: a span
+    /// opened early by a breath is half a bar, so a plucked tail can still be
+    /// dying as the next chord lands, and that is a string ringing on, not a pad.
     func testChordsDieInsideABar() {
-        let bed = Harmony.bed(under: line(16), in: Music.default)
-        XCTAssertGreaterThan(bed.count, 1, "need at least two spans to compare")
-        for voicing in bed {
-            XCTAssertLessThan(voicing.duration + Harmony.roll, Harmony.barLength,
-                              "a chord is still sounding when the next bar lands")
-        }
+        XCTAssertLessThan(Harmony.noteLength + Harmony.roll, Harmony.barLength,
+                          "a chord is still sounding when the next bar lands")
     }
 
     /// The bed speaks in the same voice as the rest of the app: something that
@@ -460,8 +462,10 @@ final class HarmonyTests: XCTestCase {
     }
 
     /// Ties fall to the chord already sounding, so a span that is indifferent
-    /// does not change chord for the sake of it.
-    func testTiesStayOnThePreviousChord() {
+    /// does not change chord for the sake of it. This fixture reaches the
+    /// fourth tie-break: neither tied chord is the previous chord, and home
+    /// is excluded from the penultimate pool, so the lower root decides.
+    func testTiesGoToTheLowerRoot() {
         let major = Music.tunings[0]
         // Degree 2 is pitch class 4, which only the dyad (9, 4) holds; degree
         // 3 is 7, held by (0, 7) and (7, 2). A span entirely on degree 3 after
@@ -476,6 +480,26 @@ final class HarmonyTests: XCTestCase {
         XCTAssertEqual(chords.count, 3)
         XCTAssertEqual(chords[0].root, 9)
         XCTAssertEqual(chords[1].root, 0, "tie between (0,7) and (7,2) should go to the lower root")
+    }
+
+    /// Ties go to the chord already sounding, so a span that is indifferent
+    /// does not change chord for the sake of it. The first span opens on
+    /// degree 1 (pitch class 2) and then sits on degree 3 (pitch class 7):
+    /// (7, 2) holds the downbeat and covers the rest, so it wins outright.
+    /// The second span is all pitch class 7, which (0, 7) and (7, 2) tie
+    /// on — and the lower root would say 0, but (7, 2) is already sounding,
+    /// so it stays. The last note is degree 1, so home is (2, 9) and sits
+    /// outside the tie.
+    func testTiesStayOnThePreviousChord() {
+        let major = Music.tunings[0]
+        let stars = line(degrees: [1] + Array(repeating: 3, count: 31) + [1])
+        let opens = Harmony.spans(under: stars).map(\.lowerBound)
+        XCTAssertEqual(opens.count, 3)
+        for (open, expected) in zip(opens, [0, 2.4, 4.8]) {
+            XCTAssertEqual(open, expected, accuracy: 1e-9)
+        }
+        let chords = Harmony.chords(under: stars, in: major)
+        XCTAssertEqual(chords.map(\.root), [7, 7, 2])
     }
 
     // MARK: - The keepsake

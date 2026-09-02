@@ -15,6 +15,18 @@ final class HarmonyTests: XCTestCase {
         }
     }
 
+    /// A star sitting exactly on scale degree `degree`, `0...14`.
+    func star(atDegree degree: Int, x: CGFloat = 0.5) -> Star {
+        star(x, 1 - CGFloat(degree) / CGFloat(Music.range))
+    }
+
+    /// A line that walks the given degrees left to right, evenly spaced.
+    func line(degrees: [Int]) -> [Star] {
+        degrees.enumerated().map { i, d in
+            star(atDegree: d, x: 0.1 + CGFloat(i) * 0.8 / CGFloat(max(degrees.count - 1, 1)))
+        }
+    }
+
     // MARK: - The safety argument
 
     /// The whole reason the bed cannot sour a melody: every note it plays is a
@@ -56,14 +68,73 @@ final class HarmonyTests: XCTestCase {
         }
     }
 
-    /// `(0, 7)` is always available, which is what lets `tonic(in:)` be the same
-    /// chord in every tuning. Leans on the same guarantee
-    /// `RhythmTests.testEveryTuningSharesItsRootAndFifth` holds.
-    func testHomeIsTheTonicAndItsFifthInEveryTuning() {
+    // MARK: - Home
+
+    /// The tonic is wherever the tune rests, not degree 0 of the tuning. The
+    /// keepsake's spiral closes on degree 4 in every key, and a bed that called
+    /// degree 0 home was in a different key from the tune it sat under.
+    func testTheTonicIsTheLastNotesPitchClass() {
         for tuning in Music.tunings {
-            let home = Harmony.tonic(in: tuning)
-            XCTAssertEqual(home.tones, [0, 7], tuning.name)
-            XCTAssertTrue(Harmony.fifthDyads(in: tuning).contains(home), tuning.name)
+            for degree in 0...Music.range {
+                let stars = line(degrees: [0, 3, degree])
+                let expected = Music.semitone(forY: stars.last!.y, in: tuning) % 12
+                XCTAssertEqual(Harmony.tonic(of: stars, in: tuning), expected,
+                               "\(tuning.name) degree \(degree)")
+            }
+        }
+        XCTAssertEqual(Harmony.tonic(of: [], in: Music.default), 0)
+    }
+
+    /// Home is the tonic and its fifth when the tuning has that fifth, and the
+    /// tonic alone when it does not — bare, but unambiguous. Never an octave:
+    /// `voiced` folds every tone into one octave, so `[t, t + 12]` would come
+    /// out as the same note rolled twice.
+    func testHomeIsRootedOnTheTonic() {
+        for tuning in Music.tunings {
+            let members = Set(tuning.degrees)
+            for degree in 0...Music.range {
+                let stars = line(degrees: [2, degree])
+                let home = Harmony.home(for: stars, in: tuning)
+                let tonic = Harmony.tonic(of: stars, in: tuning)
+                XCTAssertEqual(home.root, tonic, tuning.name)
+                XCTAssertEqual(home.tones.first, tonic, tuning.name)
+                if members.contains((tonic + 7) % 12) {
+                    XCTAssertEqual(home.tones, [tonic, tonic + 7], "\(tuning.name) has the fifth")
+                } else {
+                    XCTAssertEqual(home.tones, [tonic], "\(tuning.name) lacks the fifth")
+                }
+                XCTAssertEqual(Set(Harmony.voiced(home)).count, home.tones.count,
+                               "\(tuning.name): a tone is doubled")
+            }
+        }
+    }
+
+    /// The keepsake rests on degree 4. Three tunings have its fifth; In and
+    /// Balinese do not, and take the bare tonic.
+    func testWhichTuningsGiveTheKeepsakeAFifth() {
+        let expected = ["major": 2, "minor": 2, "hirajoshi": 2, "in": 1, "balinese": 1]
+        for tuning in Music.tunings {
+            let home = Harmony.home(for: FiftySky.stars(), in: tuning)
+            XCTAssertEqual(home.tones.count, expected[tuning.id], tuning.name)
+        }
+    }
+
+    /// Home first, then every fifth dyad, with nothing listed twice: when home
+    /// *is* one of the fifth dyads it must not appear again as a competitor.
+    func testCandidatesAreHomeAndEveryFifthDyadOnce() {
+        for tuning in Music.tunings {
+            for degree in 0...Music.range {
+                let stars = line(degrees: [1, degree])
+                let candidates = Harmony.candidates(for: stars, in: tuning)
+                let home = Harmony.home(for: stars, in: tuning)
+                XCTAssertEqual(candidates.first, home, tuning.name)
+                let sets = candidates.map { Set(Harmony.voiced($0)) }
+                XCTAssertEqual(Set(sets).count, sets.count, "\(tuning.name): a chord is listed twice")
+                for dyad in Harmony.fifthDyads(in: tuning) {
+                    XCTAssertTrue(sets.contains(Set(Harmony.voiced(dyad))),
+                                  "\(tuning.name): dyad on \(dyad.root) is missing")
+                }
+            }
         }
     }
 

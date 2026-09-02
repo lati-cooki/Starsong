@@ -97,6 +97,48 @@ enum Harmony {
             .map { Chord(root: $0, tones: [$0, $0 + 7]) }
     }
 
+    // MARK: - Home
+
+    /// The pitch class the tune rests on: its last note.
+    ///
+    /// Not degree 0 of the tuning. The keepsake's spiral opens near the top of
+    /// the sky and closes at the bottom of its own rim, and both of those land
+    /// on degree 4 in every key — so a bed that called degree 0 home was in a
+    /// different key from the melody it sat under. Where a tune ends is what
+    /// the ear takes for its key, and the bass has to agree.
+    static func tonic(of stars: [Star], in tuning: Music.Tuning) -> Int {
+        guard let last = stars.last else { return 0 }
+        return Music.semitone(forY: last.y, in: tuning) % 12
+    }
+
+    /// The tonic and its fifth, when the tuning has that fifth; otherwise the
+    /// tonic alone. Bare, but it cannot be mistaken for anything else, and it
+    /// keeps the safety rule: no note from outside the tuning.
+    ///
+    /// Not an octave. `voiced` folds every tone into one octave, so `[t, t+12]`
+    /// would come out as the same note rolled twice — a flam, not a chord.
+    static func home(for stars: [Star], in tuning: Music.Tuning) -> Chord {
+        let tonic = tonic(of: stars, in: tuning)
+        guard Set(tuning.degrees).contains((tonic + 7) % 12) else {
+            return Chord(root: tonic, tones: [tonic])
+        }
+        return Chord(root: tonic, tones: [tonic, tonic + 7])
+    }
+
+    /// Everything the bed may play under this line: home, then every fifth
+    /// dyad in the tuning. Home comes first so that a tie on fit falls to it.
+    /// Deduplicated by folded pitch-class set, because home is usually one of
+    /// the dyads already and must not compete with itself.
+    static func candidates(for stars: [Star], in tuning: Music.Tuning) -> [Chord] {
+        let home = home(for: stars, in: tuning)
+        var seen: Set<Set<Int>> = [Set(voiced(home))]
+        var chords = [home]
+        for dyad in fifthDyads(in: tuning) where seen.insert(Set(voiced(dyad))).inserted {
+            chords.append(dyad)
+        }
+        return chords
+    }
+
     /// Home.
     static func tonic(in tuning: Music.Tuning) -> Chord {
         Chord(root: 0, tones: [0, 7])

@@ -48,29 +48,31 @@ enum Harmony {
     static let barPulses = 8
     static var barLength: Double { Music.pulse * Double(barPulses) }
 
-    /// How long a chord sounds for. Comfortably inside a bar, so one chord has
-    /// died away before the next arrives.
+    /// How far a chord runs past its span, so that one hands over to the next
+    /// in a crossfade rather than leaving a hole at every change. Each chord
+    /// sounds for its whole span plus this.
     ///
-    /// This was the opposite at first — `barLength + 0.6`, so that chords
-    /// overlapped and the harmony was continuous underneath the line. On a
-    /// phone that is a horror-film drone, and the reason is worth writing down
-    /// because none of it is obvious from the numbers:
+    /// The bed has been on both sides of this line, and the history is the
+    /// reason the numbers and the voice are what they are:
     ///
-    /// - It was voiced on `Instrument.brass`, which is the one voice with no
-    ///   `exp(-t)` term in it. It holds at full amplitude for its whole
-    ///   duration instead of dying away like everything else in the app, so
-    ///   overlapping bars made an unbroken wall rather than a wash.
-    /// - Brass is ten harmonics at 1/n. A phone speaker rolls off below roughly
-    ///   300 Hz, so a bed built at 110–207 Hz was not heard as bass at all —
-    ///   what came out was harmonics three through ten, 330–1100 Hz, as a
-    ///   mid-range buzz. Putting the bed low did not put it out of the way.
-    /// - Then `largeHall` smeared the whole thing together.
+    /// - The first bed overlapped by `barLength + 0.6` on `Instrument.brass`,
+    ///   which is the one voice with no `exp(-t)` term in it. Ten harmonics at
+    ///   1/n holding at full amplitude, bar over bar, made an unbroken wall
+    ///   rather than a wash; a phone speaker rolls off below roughly 300 Hz,
+    ///   so a bed at 110–207 Hz came out as harmonics three through ten,
+    ///   330–1100 Hz, as a mid-range buzz; and `largeHall` smeared the lot
+    ///   together. A horror-film drone.
+    /// - The second bed went the other way: a plucked string ringing 1.3 s
+    ///   inside a span of 1.2 to 2.6 s. It decayed like everything else in the
+    ///   app, and for about half the piece there was nothing under the line at
+    ///   all. A stab is rhythm, not harmony.
     ///
-    /// So the shape of the mistake was not a volume that wanted turning down.
-    /// Starsong is decaying pings in a reverb, all the way through; a sustained
-    /// pad is a foreign object in it however carefully it is tuned. Harmony has
-    /// to be said in the same voice as everything else.
-    static let noteLength = 1.3
+    /// This one holds, on `Instrument.pad`: three partials rather than ten, a
+    /// core that fades to a third of itself by the end of a bar, retriggered
+    /// at every change so it swells and settles instead of sitting there. The
+    /// wall came from a voice that could not decay, not from chords that
+    /// touched.
+    static let overlap = 0.3
 
     // MARK: - Chords
 
@@ -301,20 +303,20 @@ enum Harmony {
     /// One voicing per span, with the chord fit chose for it.
     static func bed(under stars: [Star], in tuning: Music.Tuning) -> [Voicing] {
         zip(spans(under: stars), chords(under: stars, in: tuning)).map { span, chord in
-            Voicing(chord: chord, delay: span.lowerBound, duration: noteLength)
+            Voicing(chord: chord,
+                    delay: span.lowerBound,
+                    duration: span.upperBound - span.lowerBound + overlap)
         }
     }
 
-    /// A plucked string, low and quiet.
-    ///
-    /// `Instrument.pluck` for the reason in `noteLength`: it decays, so a chord
-    /// blooms and dies the way every other sound in the app does, and at these
-    /// frequencies Karplus-Strong is a bass string rather than anything
-    /// pretending to be a pad.
-    static let voice = Instrument.pluck
+    /// A pad, low and quiet. See `overlap` for why not brass and why not a
+    /// pluck. Its octave and its bloom two octaves up land at 220–880 Hz,
+    /// which is the part of the bed a phone speaker can actually reproduce.
+    static let voice = Instrument.pad
     /// Under the melody's quietest note by a good margin. Harmony you notice
-    /// only when it changes is doing its job.
-    static let volume: Float = 0.05
+    /// only when it changes is doing its job. Up from 0.05 with the move to a
+    /// pad, whose three sine partials carry less than a plucked string's.
+    static let volume: Float = 0.08
 
     /// The gap between the two notes of a chord.
     ///

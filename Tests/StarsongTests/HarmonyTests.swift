@@ -262,8 +262,10 @@ final class HarmonyTests: XCTestCase {
 
     // MARK: - Fitting the melody
 
-    /// The bed has one chord per span and the spans tile the cycle, so the
-    /// arrival is still sounding through the rest at the loop seam.
+    /// The bed has one chord per span, each held for its whole span and a
+    /// little into the next, and the spans tile the cycle — so there is
+    /// harmony under every note, and the arrival is still sounding through the
+    /// rest at the loop seam.
     func testTheBedCoversTheWholeCycle() {
         for tuning in Music.tunings {
             for count in 2...12 {
@@ -274,35 +276,41 @@ final class HarmonyTests: XCTestCase {
                 XCTAssertEqual(bed.first?.delay, 0, "\(tuning.name), \(count) notes: no downbeat chord")
                 for (voicing, span) in zip(bed, spans) {
                     XCTAssertEqual(voicing.delay, span.lowerBound, accuracy: 1e-9, tuning.name)
-                    XCTAssertEqual(voicing.duration, Harmony.noteLength, tuning.name)
+                    XCTAssertEqual(voicing.duration,
+                                   span.upperBound - span.lowerBound + Harmony.overlap,
+                                   accuracy: 1e-9, tuning.name)
                 }
             }
         }
     }
 
-    /// A chord is gone before the next bar. Overlapping them is what turned the
-    /// first attempt into a drone — see `Harmony.noteLength`. Every voicing
-    /// rings `noteLength`, so this is a relation between two constants: a span
-    /// opened early by a breath is half a bar, so a plucked tail can still be
-    /// dying as the next chord lands, and that is a string ringing on, not a pad.
-    func testChordsDieInsideABar() {
-        XCTAssertLessThan(Harmony.noteLength + Harmony.roll, Harmony.barLength,
-                          "a chord is still sounding when the next bar lands")
+    /// One chord hands over to the next: it runs a little past its span so the
+    /// change is a crossfade rather than a gap, but not so far that a third
+    /// chord could still be sounding. The shortest span is half a bar.
+    func testEveryChordHandsOverToTheNext() {
+        XCTAssertGreaterThan(Harmony.overlap, 0, "chords should overlap, or there is a hole at every change")
+        XCTAssertLessThan(Harmony.overlap + Harmony.roll, Harmony.barLength / 2,
+                          "a chord is still sounding two changes later")
     }
 
-    /// The bed speaks in the same voice as the rest of the app: something that
-    /// blooms and dies. Every voice but `brass` has a decay term in it, and
-    /// `brass` holding at full amplitude is exactly what made a sustained bed
-    /// sound like a horror film.
-    func testTheBedIsVoicedOnSomethingThatDecays() {
-        XCTAssertNotEqual(Harmony.voice, .brass,
-                          "brass does not decay — see Harmony.noteLength")
-        let held = Harmony.voice.samples(frequency: 110, duration: 1.3,
-                                         sampleRate: 44_100)
-        let opening = held.prefix(held.count / 4).map { abs($0) }.max() ?? 0
-        let ending = held.suffix(held.count / 4).map { abs($0) }.max() ?? 0
+    /// Harmony has to be *there* under the line, and it also has to breathe.
+    /// Measured over a bar at the bed's bass note: still clearly sounding at
+    /// the middle of the bar, and well down by the end of it. A plucked string
+    /// fails the first — it is a stab, and there was nothing under the tune for
+    /// half of the piece. Brass fails the second — it holds at full amplitude,
+    /// which is what made the first sustained bed a horror-film drone.
+    func testTheBedSustainsAndBreathes() {
+        XCTAssertNotEqual(Harmony.voice, .brass, "brass does not breathe — see Harmony.overlap")
+        let held = Harmony.voice.samples(frequency: Harmony.bassFrequency,
+                                         duration: Harmony.barLength, sampleRate: 44_100)
+        let quarter = held.count / 4
+        let opening = held.prefix(quarter).map { abs($0) }.max() ?? 0
+        let middle = held[(held.count * 3 / 8)..<(held.count * 5 / 8)].map { abs($0) }.max() ?? 0
+        let ending = held.suffix(quarter).map { abs($0) }.max() ?? 0
+        XCTAssertGreaterThan(middle, opening * 0.3,
+                             "the bed has died away by the middle of the bar: that is a stab, not harmony")
         XCTAssertLessThan(ending, opening * 0.5,
-                          "the bed's voice is still going at full tilt when it should have died")
+                          "the bed is still going at full tilt at the end of the bar")
     }
 
     /// Quiet enough to sit under the melody. The quietest a melody note gets is

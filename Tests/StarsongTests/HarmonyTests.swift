@@ -503,4 +503,18 @@ final class HarmonyTests: XCTestCase {
         XCTAssertEqual(spans.count, 9, "the keepsake's span count changed; re-measure this floor")
         XCTAssertGreaterThanOrEqual(landed, 6, "\(landed) of \(spans.count) chord changes land on a chord tone")
     }
+
+    /// The whole bed is scheduled in one burst, and `Synth` stops a voice
+    /// when it reuses it, so every ping of the bed needs a voice of its own
+    /// before any has sounded. Eight was sized by overlap instead and the
+    /// opening chords were cancelled before they played.
+    func testTheBedFitsInTheSynthsBedPool() {
+        for tuning in Music.tunings {
+            let pings = Harmony.bed(under: FiftySky.stars(), in: tuning)
+                .map { $0.chord.tones.count }
+                .reduce(0, +)
+            XCTAssertLessThanOrEqual(pings, Synth.bedVoiceCount,
+                                     "\(tuning.name): \(pings) pings for \(Synth.bedVoiceCount) voices")
+        }
+    }
 }

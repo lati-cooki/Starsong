@@ -477,4 +477,30 @@ final class HarmonyTests: XCTestCase {
         XCTAssertEqual(chords[0].root, 9)
         XCTAssertEqual(chords[1].root, 0, "tie between (0,7) and (7,2) should go to the lower root")
     }
+
+    // MARK: - The keepsake
+
+    /// Held the way `TuningTests` holds the tuning distance, so the fit cannot
+    /// regress by eyeball. In the keepsake's own key, Balinese, six of nine
+    /// chord changes land on a chord tone. Six is the ceiling: the other three
+    /// open on degree 1, and Balinese has no fifth dyad containing it — that is
+    /// the tuning's own character, not something the bed can fix without
+    /// breaking the safety rule. Measured 2026-09-01; the bar-counted bed
+    /// managed two of seven.
+    func testTheKeepsakeLandsOnChordTonesWhereItsKeyAllows() {
+        let stars = FiftySky.stars()
+        let tuning = Keepsake.tuning
+        XCTAssertEqual(tuning.id, "balinese", "the keepsake changed key; re-measure this floor")
+        let onsets = Music.schedule(for: stars)
+        let spans = Harmony.spans(under: stars)
+        let chords = Harmony.chords(under: stars, in: tuning)
+        var landed = 0
+        for (span, chord) in zip(spans, chords) {
+            let note = onsets.firstIndex { abs($0 - span.lowerBound) < 1e-9 }!
+            let pc = Music.semitone(forY: stars[note].y, in: tuning) % 12
+            if Harmony.voiced(chord).contains(pc) { landed += 1 }
+        }
+        XCTAssertEqual(spans.count, 9, "the keepsake's span count changed; re-measure this floor")
+        XCTAssertGreaterThanOrEqual(landed, 6, "\(landed) of \(spans.count) chord changes land on a chord tone")
+    }
 }

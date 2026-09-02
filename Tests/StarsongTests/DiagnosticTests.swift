@@ -124,4 +124,35 @@ final class SoundDiagnostics: XCTestCase {
         }
         print("  pool size: see Synth.voiceCount")
     }
+
+    /// What the bed actually does under the keepsake, in every key: home,
+    /// where the chords change, what each lands under, and how many land on a
+    /// chord tone. Read this before moving `Harmony.barPulses` or the fit rule.
+    func testHowWellDoesTheBedFitTheKeepsake() {
+        let stars = FiftySky.stars()
+        let onsets = Music.schedule(for: stars)
+        let spans = Harmony.spans(under: stars)
+        print("BED-FIT  \(spans.count) spans over \(String(format: "%.2f", Music.cycleLength(for: stars)))s")
+        print("  span lengths: " + spans.map { String(format: "%.2f", $0.upperBound - $0.lowerBound) }.joined(separator: " "))
+        for tuning in Music.tunings {
+            let chords = Harmony.chords(under: stars, in: tuning)
+            var landed = 0
+            var rows: [String] = []
+            for (span, chord) in zip(spans, chords) {
+                let note = onsets.firstIndex { abs($0 - span.lowerBound) < 1e-9 }!
+                let pc = Music.semitone(forY: stars[note].y, in: tuning) % 12
+                let tone = Harmony.voiced(chord).contains(pc)
+                if tone { landed += 1 }
+                rows.append(String(format: "    %5.2f  %@ under %d %@",
+                                   span.lowerBound, "\(chord.tones)" as NSString, pc, tone ? "✓" : "✗"))
+            }
+            print(String(format: "  %-18@ tonic %d  home %@  %d of %d changes on a chord tone%@",
+                         tuning.name as NSString,
+                         Harmony.tonic(of: stars, in: tuning),
+                         "\(Harmony.home(for: stars, in: tuning).tones)" as NSString,
+                         landed, spans.count,
+                         tuning.id == Keepsake.tuning.id ? "   <- her key" : ""))
+            rows.forEach { print($0) }
+        }
+    }
 }

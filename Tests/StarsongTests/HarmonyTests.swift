@@ -138,6 +138,119 @@ final class HarmonyTests: XCTestCase {
         }
     }
 
+    // MARK: - Spans
+
+    /// A chord may change only where a note starts. A grid of bars drifted a
+    /// sixteenth off the melody after the first bar, because the line moves in
+    /// half-pulses and bars in whole ones.
+    func testEverySpanOpensOnAMelodyOnset() {
+        for count in 2...16 {
+            let stars = line(count)
+            let onsets = Music.schedule(for: stars)
+            for span in Harmony.spans(under: stars) {
+                XCTAssertTrue(onsets.contains { abs($0 - span.lowerBound) < 1e-9 },
+                              "\(count) notes: a span opens at \(span.lowerBound), between notes")
+            }
+        }
+    }
+
+    /// Spans tile the cycle: the first opens on the downbeat, each one starts
+    /// where the last ended, and the last runs to the end of the cycle, so the
+    /// arrival is still sounding through the rest at the loop seam.
+    func testSpansTileTheCycle() {
+        for count in 2...16 {
+            let stars = line(count)
+            let spans = Harmony.spans(under: stars)
+            XCTAssertEqual(spans.first?.lowerBound, 0, "\(count) notes")
+            XCTAssertEqual(spans.last?.upperBound ?? -1, Music.cycleLength(for: stars),
+                           accuracy: 1e-9, "\(count) notes")
+            for (a, b) in zip(spans, spans.dropFirst()) {
+                XCTAssertEqual(a.upperBound, b.lowerBound, accuracy: 1e-9, "\(count) notes: a gap between spans")
+                XCTAssertLessThan(a.lowerBound, a.upperBound, "\(count) notes: an empty span")
+            }
+        }
+    }
+
+    /// A span runs about a bar: never shorter than half of one, and — except
+    /// the last, which is the cadence and may run long — never longer than a
+    /// bar plus the two-pulse gap an onset can sit past the bar it was
+    /// waiting for. The one exception is a line whose whole cycle is shorter
+    /// than half a bar: two notes make a 0.9 s cycle and get one short span.
+    func testSpansRunAboutABar() {
+        for count in 2...16 {
+            let stars = line(count)
+            let spans = Harmony.spans(under: stars)
+            let wholeCycleIsShort = spans.count == 1
+                && Music.cycleLength(for: stars) < Harmony.barLength / 2
+            for (i, span) in spans.enumerated() {
+                let length = span.upperBound - span.lowerBound
+                if !wholeCycleIsShort {
+                    XCTAssertGreaterThanOrEqual(length + 1e-9, Harmony.barLength / 2,
+                                                "\(count) notes: span \(i) is too short")
+                }
+                if i < spans.count - 1 {
+                    XCTAssertLessThanOrEqual(length - 1e-9, Harmony.barLength + Music.longestGap,
+                                             "\(count) notes: span \(i) is too long")
+                }
+            }
+        }
+    }
+
+    /// A steady line has no breaths in it, so its spans are whole bars snapped
+    /// to the pulse: eight notes at one pulse each is exactly a bar.
+    func testASteadyLineGetsWholeBars() {
+        let stars = line(degrees: Array(repeating: [3, 5], count: 12).flatMap { $0 })   // 24 notes, even spacing
+        XCTAssertEqual(Music.gaps(between: stars).dropFirst().min(), Music.pulse, "not a steady line")
+        let spans = Harmony.spans(under: stars)
+        for span in spans.dropLast() {
+            XCTAssertEqual(span.upperBound - span.lowerBound, Harmony.barLength, accuracy: 1e-9)
+        }
+    }
+
+    /// A breath — a two-pulse gap — lets a chord change early, but only once
+    /// the span has run half a bar; a breath after a quarter of a bar is just
+    /// a long note.
+    func testABreathOpensASpanAfterHalfABar() {
+        // Reaches: three short, one long (a breath), then short. Positions
+        // chosen so the gaps come out as pulse/2, pulse/2, pulse/2, 2*pulse.
+        let stars = [star(0.10, 0.5), star(0.15, 0.5), star(0.20, 0.5), star(0.25, 0.5),
+                     star(0.65, 0.5), star(0.70, 0.5), star(0.75, 0.5), star(0.80, 0.5),
+                     star(0.85, 0.5), star(0.90, 0.5), star(0.95, 0.5)]
+        let gaps = Music.gaps(between: stars)
+        XCTAssertEqual(gaps[4], Music.longestGap, accuracy: 1e-9, "the fourth reach should be a breath")
+        let onsets = Music.schedule(for: stars)
+        let spans = Harmony.spans(under: stars)
+        // The breath lands at onsets[4] = 0.15 * 3 + 0.6 = 1.05 s, which is
+        // less than half a bar (1.2 s) into the first span, so it must NOT open
+        // a span there.
+        XCTAssertFalse(spans.contains { abs($0.lowerBound - onsets[4]) < 1e-9 },
+                       "a breath before half a bar opened a span")
+
+        // Nine tight notes then the breath: it lands at 8 * 0.15 + 0.6 =
+        // 1.8 s, past half a bar and short of a whole one, so it must open a
+        // span there and nowhere earlier. Six notes follow it so that more
+        // than half a bar of cycle remains after the breath.
+        let later = (0..<9).map { star(0.10 + CGFloat($0) * 0.03, 0.5) }
+            + (0..<6).map { star(0.70 + CGFloat($0) * 0.03, 0.5) }
+        let laterOnsets = Music.schedule(for: later)
+        XCTAssertEqual(Music.gaps(between: later)[9], Music.longestGap, accuracy: 1e-9)
+        XCTAssertEqual(Harmony.spans(under: later).map(\.lowerBound), [0, laterOnsets[9]])
+    }
+
+    /// A chord does not change on the very last note to ring for a single
+    /// gap: an onset opens a span only if half a bar of the cycle remains
+    /// after it. Nine steady notes at one pulse each reach a bar on the
+    /// ninth, but only 0.6 s of cycle is left there, so it stays one span.
+    func testNoSpanOpensWithLessThanHalfABarLeft() {
+        let stars = line(degrees: Array(repeating: 0, count: 9))
+        XCTAssertEqual(Music.gaps(between: stars)[8], Music.pulse, accuracy: 1e-9, "not a steady line")
+        XCTAssertEqual(Music.schedule(for: stars)[8], Harmony.barLength, accuracy: 1e-9, "ninth note should land on the bar")
+        XCTAssertEqual(Harmony.spans(under: stars).count, 1)
+        // Two more notes and there is room: the span opens on the ninth.
+        let longer = line(degrees: Array(repeating: 0, count: 13))
+        XCTAssertEqual(Harmony.spans(under: longer).map(\.lowerBound), [0, Harmony.barLength])
+    }
+
     // MARK: - Cadence
 
     /// The point of the exercise. Whatever length the melody is, the bed's last

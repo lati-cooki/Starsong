@@ -178,6 +178,45 @@ enum Harmony {
         }
     }
 
+    // MARK: - Spans
+
+    /// Where the chords change. Each span is a stretch of the cycle, in
+    /// seconds from the downbeat, that one chord covers.
+    ///
+    /// A chord may change only on a melody onset — a grid of bars drifted a
+    /// sixteenth off the line after the first bar, because the melody moves
+    /// in half-pulses and bars in whole ones. Walking the onsets, one opens a
+    /// new span once the current span has run a bar, or half a bar if the
+    /// onset sits after a two-pulse gap, which is where the line breathes. So
+    /// the bar is the *target* length of a span, not a grid, and the harmonic
+    /// rhythm follows the phrase shape: the keepsake's packed early years get
+    /// bar-length spans and its spaced-out late years get shorter ones.
+    ///
+    /// An onset opens a span only if half a bar of the cycle remains after
+    /// it; otherwise the rest of the line stays in the current span. Without
+    /// that, a chord could change on the very last note and ring for a single
+    /// gap, when the final chord should already be sounding under the ending.
+    ///
+    /// The last span runs to the end of the cycle, through the rest at the
+    /// loop seam, so the arrival is still sounding when the line comes round.
+    static func spans(under stars: [Star]) -> [Range<Double>] {
+        guard stars.count >= 2 else { return [] }
+        let onsets = Music.schedule(for: stars)
+        let gaps = Music.gaps(between: stars)
+        let cycle = Music.cycleLength(for: stars)
+        var openings = [0.0]
+        for i in 1..<onsets.count {
+            guard cycle - onsets[i] >= barLength / 2 - 1e-9 else { break }
+            let running = onsets[i] - openings.last!
+            let breath = gaps[i] >= Music.longestGap - 1e-9
+            if running >= barLength - 1e-9 || (breath && running >= barLength / 2 - 1e-9) {
+                openings.append(onsets[i])
+            }
+        }
+        let ends = openings.dropFirst() + [cycle]
+        return zip(openings, ends).map { $0..<$1 }
+    }
+
     // MARK: - Pitch
 
     /// The bed sits an octave below the melody's root, so it is underneath the

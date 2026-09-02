@@ -37,4 +37,17 @@ final class MusicTests: XCTestCase {
                           "degree \(degree) produced pitch class \(pitchClass)")
         }
     }
+
+    /// The pitch a star sings, as a number the harmony can reason about. The
+    /// bottom of the sky is the root; the top is two octaves and four degrees
+    /// up, which is 24 semitones plus the tuning's highest degree.
+    func testSemitoneCountsUpFromTheRoot() {
+        for tuning in Music.tunings {
+            XCTAssertEqual(Music.semitone(forY: 1, in: tuning), 0, tuning.name)
+            XCTAssertEqual(Music.semitone(forY: 0, in: tuning),
+                           24 + tuning.degrees[4], tuning.name)
+            // Degree 5 is the root an octave up, in every tuning.
+            XCTAssertEqual(Music.semitone(forY: 1 - 5.0 / 14, in: tuning), 12, tuning.name)
+        }
+    }
 }

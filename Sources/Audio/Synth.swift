@@ -29,8 +29,8 @@ final class Synth {
     /// round-robin pushes past that and stops the opening notes mid-ring, which
     /// is the fault that sizing the pool for fifty notes went and fixed.
     ///
-    /// The bed needs far fewer: chords change once a bar and ring `Harmony.ring`
-    /// past it, so at most two bars of two tones are sounding at once.
+    /// The bed's pool is sized the same way — by pings scheduled at once —
+    /// because the keepsake's whole bed goes on the clock in one burst too.
     enum Channel {
         case melody, bed
     }
@@ -53,9 +53,12 @@ final class Synth {
     /// of fifty notes, which does not fit: the round-robin wrapped and the first
     /// two years were stopped mid-ring before they had properly begun.
     private static let voiceCount = 64
-    /// Four would cover the overlap; eight leaves room for the bed to be given a
-    /// third tone later without this becoming load-bearing again.
-    private static let bedVoiceCount = 8
+    /// Sized like `voiceCount`: by how many pings are scheduled at once, not by
+    /// how many are sounding. The keepsake's bed is put on the clock in one
+    /// burst — up to thirteen spans of two tones in a fifteen-second cycle —
+    /// and a wrapped round-robin would `stop()` a chord still waiting to play.
+    /// Eight was chosen by overlap and lost the opening chords.
+    static let bedVoiceCount = 32
     /// Bounded by bytes rather than by entries. A 2.4-second note is about
     /// 400 kB, a short one a tenth of that, so counting entries makes the real
     /// ceiling swing by an order of magnitude — and five voices multiply

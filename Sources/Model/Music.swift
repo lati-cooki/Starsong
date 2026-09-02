@@ -45,11 +45,16 @@ enum Music {
         return min(max(Int(raw), 0), range)
     }
 
-    static func pitch(forY y: CGFloat, in tuning: Tuning = Music.default) -> Double {
+    /// Semitones above the root — the pitch a star sings, as a number the
+    /// harmony can reason about. The pitch class is this mod 12.
+    static func semitone(forY y: CGFloat, in tuning: Tuning = Music.default) -> Int {
         let degree = degree(forY: y)
         let octave = degree / tuning.degrees.count
-        let semitone = tuning.degrees[degree % tuning.degrees.count]
-        return rootFrequency * pow(2, Double(octave * 12 + semitone) / 12)
+        return octave * 12 + tuning.degrees[degree % tuning.degrees.count]
+    }
+
+    static func pitch(forY y: CGFloat, in tuning: Tuning = Music.default) -> Double {
+        rootFrequency * pow(2, Double(semitone(forY: y, in: tuning)) / 12)
     }
 
     // MARK: - Saying it out loud
@@ -59,10 +64,7 @@ enum Music {
 
     /// The note a star sings, spoken. 220 Hz is A3, which is MIDI 57.
     static func noteName(forY y: CGFloat, in tuning: Tuning = Music.default) -> String {
-        let degree = degree(forY: y)
-        let octave = degree / tuning.degrees.count
-        let semitone = tuning.degrees[degree % tuning.degrees.count]
-        let midi = 57 + octave * 12 + semitone
+        let midi = 57 + semitone(forY: y, in: tuning)
         return "\(noteNames[midi % 12]) \(midi / 12 - 1)"
     }
 
